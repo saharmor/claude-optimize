@@ -1,0 +1,86 @@
+[
+  {
+    "id": "TK-001",
+    "subject": "Can't log into my account",
+    "body": "I've been trying to log in for the past 2 hours but keep getting an 'invalid credentials' error. I'm sure my password is correct. Please help ASAP, I have an urgent order to place.",
+    "customer_email": "frustrated_user@example.com",
+    "created_at": "2026-03-28T10:30:00Z"
+  },
+  {
+    "id": "TK-002",
+    "subject": "Refund request for order #9823",
+    "body": "I received the wrong item in my order #9823. I ordered a blue sweater (size M) but received a red scarf. I'd like a full refund or the correct item shipped to me.",
+    "customer_email": "jane.doe@example.com",
+    "created_at": "2026-03-28T11:15:00Z"
+  },
+  {
+    "id": "TK-003",
+    "subject": "How do I change my shipping address?",
+    "body": "I just placed order #10241 but realized I put in my old address. How can I update the shipping address before it ships? It hasn't been shipped yet.",
+    "customer_email": "moving_soon@example.com",
+    "created_at": "2026-03-28T12:00:00Z"
+  },
+  {
+    "id": "TK-004",
+    "subject": "Product suggestion",
+    "body": "Love your store! Just wanted to suggest that you carry more eco-friendly packaging options. A lot of your competitors are doing this and I think it would be a great addition.",
+    "customer_email": "eco_fan@example.com",
+    "created_at": "2026-03-28T13:45:00Z"
+  },
+  {
+    "id": "TK-005",
+    "subject": "Bulk order discount inquiry",
+    "body": "Hi, I'm interested in ordering 500 units of your premium notebook set for our company. Do you offer bulk pricing or corporate discounts? We're a mid-size company with about 200 employees.",
+    "customer_email": "procurement@bigcorp.com",
+    "created_at": "2026-03-28T14:20:00Z"
+  },
+  {
+    "id": "TK-006",
+    "subject": "Website is extremely slow",
+    "body": "Your website has been loading very slowly for the past 3 days. Pages take 10-15 seconds to load. I'm using Chrome on Windows 11. This is making it impossible to browse your catalog.",
+    "customer_email": "impatient_shopper@example.com",
+    "created_at": "2026-03-28T15:00:00Z"
+  },
+  {
+    "id": "TK-007",
+    "subject": "Damaged item received",
+    "body": "My order #10102 arrived with the glass vase completely shattered. The box had no bubble wrap or padding whatsoever. Very disappointed. Attaching photos.",
+    "customer_email": "broken_vase@example.com",
+    "created_at": "2026-03-28T15:30:00Z"
+  },
+  {
+    "id": "TK-008",
+    "subject": "Cancel my subscription",
+    "body": "Please cancel my monthly subscription effective immediately. I no longer need the service. My subscription ID is SUB-4421. Also please confirm when the cancellation is processed.",
+    "customer_email": "done_with_sub@example.com",
+    "created_at": "2026-03-28T16:10:00Z"
+  },
+  {
+    "id": "TK-009",
+    "subject": "API integration question",
+    "body": "We're building an integration with your platform's API. The documentation mentions rate limits but doesn't specify the exact numbers for the Enterprise tier. Can you clarify what our rate limits are? Our API key starts with sk-ent-xxxx.",
+    "customer_email": "dev@techstartup.io",
+    "created_at": "2026-03-28T16:45:00Z"
+  },
+  {
+    "id": "TK-010",
+    "subject": "Payment declined but charged",
+    "body": "I tried to place an order and got a 'payment declined' error, but I can see the charge on my credit card statement. I don't have an order confirmation. The charge is for $127.50. Please help resolve this.",
+    "customer_email": "double_charged@example.com",
+    "created_at": "2026-03-28T17:00:00Z"
+  },
+  {
+    "id": "TK-011",
+    "subject": "Praise for customer support",
+    "body": "Just wanted to say that Sarah from your support team was incredibly helpful last week resolving my issue with order #9910. She went above and beyond. Please pass along my thanks!",
+    "customer_email": "happy_customer@example.com",
+    "created_at": "2026-03-28T17:30:00Z"
+  },
+  {
+    "id": "TK-012",
+    "subject": "Tracking number not working",
+    "body": "The tracking number for my order #10198 (tracking: 1Z999AA10123456784) shows 'not found' on the carrier website. It's been 3 days since I received the shipping confirmation. Where is my package?",
+    "customer_email": "wheres_my_stuff@example.com",
+    "created_at": "2026-03-28T18:00:00Z"
+  }
+]
