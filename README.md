@@ -1,106 +1,92 @@
+<div align="center">
+
 # Claude Optimize
 
-Scan your Claude-powered codebase and get a prioritized optimization report. Surface concrete opportunities to reduce cost, cut latency, and improve reliability by leveraging Claude API capabilities that most developers haven't implemented.
+Find the biggest wins in your Claude integration.
 
-## What it does
+<img src="frontend/src/assets/hero.png" alt="Claude Optimize hero" width="280" />
 
-Claude Optimize runs **5 parallel analyzers** against your codebase, each powered by a Claude Code headless session:
+</div>
 
-| Analyzer | What it finds |
-|---|---|
-| **Prompt Engineering** | Vague prompts, missing XML tags, no few-shot examples, missing output contracts |
-| **Prompt Caching** | Large static prompts sent without `cache_control`, repeated tool definitions |
-| **Batching** | Sequential loops of independent API calls that could use Message Batches (50% savings) |
-| **Tool Use** | All tools passed to every call, oversized descriptions, manual parsing instead of native tool use |
-| **Structured Outputs** | Regex parsing, json.loads with retries, "return JSON" prompts instead of native structured outputs |
+## Features
 
-Each finding includes:
-- The exact code from your repo with the issue highlighted
-- A plain-English explanation of the Claude feature being leveraged
-- An auto-generated fix ready to copy-paste
-- Estimated cost/latency impact
-- Link to the relevant Anthropic docs
+- **Prompt review**: finds vague prompts, missing XML structure, weak output contracts, and missing examples
+- **Prompt caching analysis**: detects large repeated prompt prefixes and tool definitions that should be cached
+- **Batching recommendations**: flags sequential Claude calls that belong in the Message Batches API
+- **Tool use optimization**: catches kitchen-sink tool lists, oversized definitions, and poor tool scoping
+- **Structured output checks**: spots regex parsing, brittle `json.loads()` flows, and text-only schema enforcement
+- **Actionable report UI**: every finding includes the current code, a recommendation, and a suggested fix
 
-## Quick Start
+## Run In <1 Min
 
 ### Prerequisites
 
 - Python 3.11+
-- Node.js 18+
+- Node.js 20.19+ or 22.12+
 - [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) installed and authenticated
+- `ANTHROPIC_API_KEY` exported in your shell before starting the backend
 
-### 1. Install backend
+### Backend
 
 ```bash
 cd backend
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e .
+uvicorn main:app --reload --port 8000
 ```
 
-### 2. Install frontend
+### Frontend
 
 ```bash
 cd frontend
 npm install
-```
-
-### 3. Run
-
-Start both in separate terminals:
-
-```bash
-# Terminal 1: Backend
-cd backend
-source .venv/bin/activate
-uvicorn main:app --reload --port 8000
-
-# Terminal 2: Frontend
-cd frontend
 npm run dev
 ```
 
-Open http://localhost:5173, enter the path to a Claude-powered project, and click **Run Scan**.
+Open `http://localhost:5173`, enter a local project path, and run a scan.
 
-### Environment notes
+## Bundled Demo
 
-- Set `ANTHROPIC_API_KEY` in your shell or local `.env` file before running scans.
-- For safer local scanning, the backend only allows project paths inside the current user's home directory by default.
-- For production, set `CLAUDE_OPTIMIZE_ALLOWED_PATHS` to a comma-separated allowlist of directories the service is permitted to scan.
-- Set `CLAUDE_OPTIMIZE_CORS_ORIGINS` in production instead of relying on the local dev default.
-- If your Claude CLI workflow requires it, you can explicitly opt into `CLAUDE_OPTIMIZE_SKIP_PERMISSIONS=true`.
+Want to see the full flow immediately? Use the bundled demo project:
 
-### Try the demo
-
-Point the scanner at the included sample project:
-
-```
-/path/to/claude-optimize/sample_project
+```bash
+sample_project
 ```
 
-This is a customer support ticket classifier with all 5 anti-patterns baked in. Claude Optimize will find them all.
+That path is wired as a fast demo so you can preview the report without waiting on a full live scan.
 
-## Architecture
+## Configuration
 
+```bash
+ANTHROPIC_API_KEY=
+CLAUDE_OPTIMIZE_MODEL=sonnet
+CLAUDE_OPTIMIZE_MAX_TURNS=12
+CLAUDE_OPTIMIZE_MAX_CONCURRENT_SCANS=2
+CLAUDE_OPTIMIZE_SCAN_TTL_SECONDS=3600
+CLAUDE_OPTIMIZE_SKIP_PERMISSIONS=false
+CLAUDE_OPTIMIZE_ALLOWED_PATHS=
+CLAUDE_OPTIMIZE_CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
 ```
-[React UI] --> [FastAPI backend] --> [5x Claude Code headless sessions (parallel)]
-                                            |
-                                     [Structured findings]
-                                            |
-                                     [Ranking + aggregation]
-                                            |
-                                     [Report JSON --> UI]
-```
+
+- Local scans are restricted to allowed roots for safety
+- By default, the backend accepts paths inside your home directory and this repository
+- Set `CLAUDE_OPTIMIZE_ALLOWED_PATHS` in production to explicitly control what can be scanned
+
+## Tech Stack
 
 - **Frontend**: React + TypeScript + Vite
-- **Backend**: Python FastAPI with SSE for real-time progress
-- **Analysis engine**: Claude Code headless (`claude --print`) with specialized prompts per analyzer
-- **Operational guardrails**: scan path allowlisting, bounded concurrent scans, scan TTL cleanup, and health checks via `/api/health`
+- **Backend**: FastAPI + SSE
+- **Analysis engine**: Claude Code headless sessions
 
-## Roadmap (v1)
+## Roadmap
 
-- GitHub repo URL input (clone + scan)
-- Langfuse integration for data-driven caching/batching recommendations
-- Thinking level optimization (recommend appropriate thinking levels per call)
-- Model routing (recommend Haiku vs Sonnet vs Opus per task)
-- Auto-generated PRs with fixes applied
+- GitHub repo URL input
+- Langfuse-backed usage-aware recommendations
+- thinking level recommendations
+- model routing suggestions
+- auto-generated PRs with fixes applied
+
+## License
+
+This project is currently unlicensed.
