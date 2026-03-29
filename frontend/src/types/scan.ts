@@ -1,0 +1,104 @@
+export type AnalyzerType =
+  | "prompt_engineering"
+  | "prompt_caching"
+  | "batching"
+  | "tool_use"
+  | "structured_outputs";
+
+export type AnalyzerStatus = "pending" | "running" | "completed" | "failed";
+export type Severity = "high" | "medium" | "low";
+export type ProjectSource = "bundled_demo" | "cursor" | "vscode" | "claude_code";
+
+export const ALL_ANALYZERS: AnalyzerType[] = [
+  "prompt_engineering",
+  "prompt_caching",
+  "batching",
+  "tool_use",
+  "structured_outputs",
+];
+
+export interface CodeLocation {
+  file: string;
+  lines: string;
+  function: string;
+}
+
+export interface CodeSnippet {
+  description: string;
+  code_snippet: string;
+  language: string;
+}
+
+export interface Recommendation {
+  title: string;
+  description: string;
+  docs_url: string;
+}
+
+export interface Impact {
+  cost_reduction: Severity;
+  latency_reduction: Severity;
+  reliability_improvement: Severity;
+  estimated_savings_detail: string;
+}
+
+export interface Finding {
+  category: AnalyzerType;
+  location: CodeLocation;
+  current_state: CodeSnippet;
+  recommendation: Recommendation;
+  suggested_fix: CodeSnippet;
+  impact: Impact;
+  confidence: Severity;
+  effort: Severity;
+}
+
+export interface TopWin {
+  title: string;
+  category: AnalyzerType;
+  estimated_savings: string;
+}
+
+export interface Scorecard {
+  total_findings: number;
+  by_category: Record<string, number>;
+  by_impact: Record<string, number>;
+  estimated_total_savings: string;
+  top_wins: TopWin[];
+}
+
+export interface ScanResult {
+  scan_id: string;
+  project_path: string;
+  status: "pending" | "running" | "completed" | "failed";
+  analyzer_statuses: Record<AnalyzerType, AnalyzerStatus>;
+  analyzer_errors: Partial<Record<AnalyzerType, string>>;
+  findings: Finding[];
+  scorecard: Scorecard | null;
+  started_at: string | null;
+  completed_at: string | null;
+  error: string | null;
+}
+
+export interface RecentProject {
+  path: string;
+  name: string;
+  last_used_at: string | null;
+  sources: ProjectSource[];
+}
+
+export const ANALYZER_LABELS: Record<AnalyzerType, string> = {
+  prompt_engineering: "Prompt Engineering",
+  prompt_caching: "Prompt Caching",
+  batching: "Batching",
+  tool_use: "Tool Use",
+  structured_outputs: "Structured Outputs",
+};
+
+export const ANALYZER_ICONS: Record<AnalyzerType, string> = {
+  prompt_engineering: "PE",
+  prompt_caching: "PC",
+  batching: "BA",
+  tool_use: "TU",
+  structured_outputs: "SO",
+};

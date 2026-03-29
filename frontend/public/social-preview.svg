@@ -1,0 +1,87 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect width="1200" height="630" fill="#F5F3EC"/>
+<rect x="880" width="320" height="630" fill="#C46A42"/>
+<rect x="0.5" y="0.5" width="1199" height="629" rx="24" stroke="#DEDAD0"/>
+<g opacity="0.55" filter="url(#filter0_f_1_1)">
+<circle cx="300" cy="120" r="140" fill="#F2E6DE"/>
+</g>
+<g opacity="0.4" filter="url(#filter1_f_1_1)">
+<circle cx="1060" cy="540" r="170" fill="#F2E6DE"/>
+</g>
+<g>
+<path d="M110 271L149 198L188 271L149 344L110 271Z" stroke="#C46A42" stroke-width="8" stroke-linejoin="round"/>
+<path d="M149 198L219 271L149 344" stroke="#C46A42" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M149 198L79 271L149 344" stroke="#C46A42" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M110 271H188" stroke="#C46A42" stroke-width="8" stroke-linecap="round"/>
+</g>
+<text x="265" y="250" fill="#1C1B19" font-family="Inter, Arial, sans-serif" font-size="76" font-weight="700" letter-spacing="-2">Claude</text>
+<text x="265" y="330" fill="#1C1B19" font-family="Inter, Arial, sans-serif" font-size="76" font-weight="700" letter-spacing="-2">Optimize</text>
+<text x="78" y="414" fill="#1C1B19" font-family="Inter, Arial, sans-serif" font-size="34" font-weight="500">
+  <tspan x="78" dy="0">Audit Claude-powered codebases</tspan>
+  <tspan x="78" dy="46">for cost, latency, and reliability</tspan>
+  <tspan x="78" dy="46">improvements</tspan>
+</text>
+
+<g filter="url(#filter2_d_1_1)">
+<rect x="730" y="84" width="400" height="400" rx="28" fill="#FFFDFC"/>
+<rect x="730.5" y="84.5" width="399" height="399" rx="27.5" stroke="#DEDAD0"/>
+</g>
+<text x="764" y="136" fill="#7A7870" font-family="Inter, Arial, sans-serif" font-size="24" font-weight="600">Analyzer</text>
+
+<g>
+<rect x="764" y="162" width="332" height="56" rx="16" fill="#FFFFFF" stroke="#DEDAD0"/>
+<rect x="998" y="176" width="78" height="28" rx="14" fill="#F0EDE5"/>
+<text x="786" y="198" fill="#1C1B19" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="600">Prompt Engineering</text>
+<text x="1017" y="195" fill="#7A7870" font-family="Inter, Arial, sans-serif" font-size="14" font-weight="600">Metrics</text>
+</g>
+
+<g>
+<rect x="764" y="234" width="332" height="56" rx="16" fill="#FFFFFF" stroke="#DEDAD0"/>
+<rect x="998" y="248" width="78" height="28" rx="14" fill="#F0EDE5"/>
+<text x="786" y="270" fill="#1C1B19" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="600">Prompt Caching</text>
+<text x="1017" y="267" fill="#7A7870" font-family="Inter, Arial, sans-serif" font-size="14" font-weight="600">Savings</text>
+</g>
+
+<g>
+<rect x="764" y="306" width="332" height="56" rx="16" fill="#FFFFFF" stroke="#DEDAD0"/>
+<rect x="998" y="320" width="78" height="28" rx="14" fill="#F0EDE5"/>
+<text x="786" y="342" fill="#1C1B19" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="600">Batching</text>
+<text x="1014" y="339" fill="#7A7870" font-family="Inter, Arial, sans-serif" font-size="14" font-weight="600">Queue</text>
+</g>
+
+<g>
+<rect x="764" y="378" width="332" height="56" rx="16" fill="#FFFFFF" stroke="#DEDAD0"/>
+<rect x="998" y="392" width="78" height="28" rx="14" fill="#F0EDE5"/>
+<text x="786" y="414" fill="#1C1B19" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="600">Tool Use</text>
+<text x="1017" y="411" fill="#7A7870" font-family="Inter, Arial, sans-serif" font-size="14" font-weight="600">Scope</text>
+</g>
+
+<g>
+<rect x="764" y="450" width="332" height="56" rx="16" fill="#FFFFFF" stroke="#DEDAD0"/>
+<rect x="998" y="464" width="78" height="28" rx="14" fill="#F0EDE5"/>
+<text x="786" y="486" fill="#1C1B19" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="600">Structured Outputs</text>
+<text x="1012" y="483" fill="#7A7870" font-family="Inter, Arial, sans-serif" font-size="14" font-weight="600">Schema</text>
+</g>
+
+<defs>
+<filter id="filter0_f_1_1" x="0" y="-180" width="600" height="600" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+<feFlood flood-opacity="0" result="BackgroundImageFix"/>
+<feBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape"/>
+<feGaussianBlur stdDeviation="80" result="effect1_foregroundBlur_1_1"/>
+</filter>
+<filter id="filter1_f_1_1" x="730" y="210" width="660" height="660" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+<feFlood flood-opacity="0" result="BackgroundImageFix"/>
+<feBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape"/>
+<feGaussianBlur stdDeviation="80" result="effect1_foregroundBlur_1_1"/>
+</filter>
+<filter id="filter2_d_1_1" x="700" y="64" width="460" height="460" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+<feFlood flood-opacity="0" result="BackgroundImageFix"/>
+<feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha"/>
+<feOffset dy="10"/>
+<feGaussianBlur stdDeviation="15"/>
+<feColorMatrix type="matrix" values="0 0 0 0 0.109804 0 0 0 0 0.105882 0 0 0 0 0.0980392 0 0 0 0.1 0"/>
+<feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow_1_1"/>
+<feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow_1_1" result="shape"/>
+</filter>
+</defs>
+</svg>
