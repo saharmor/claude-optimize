@@ -1,0 +1,15 @@
+---
+description: Avoid em dashes in project copy and code
+alwaysApply: true
+---
+
+# No Em Dashes
+
+- Do not use the em dash character in this project.
+- Prefer commas, periods, colons, parentheses, or a plain hyphen when punctuation needs a separator.
+- Apply this to user-facing copy, docs, comments, logs, prompts, and placeholder text.
+
+Examples:
+
+- Use `A, or B` instead of `A` followed by an em dash and `or B`.
+- Use `N/A` or `-` for empty placeholder values instead of an em dash.
