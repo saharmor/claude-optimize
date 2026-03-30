@@ -1,4 +1,4 @@
-import type { RecentProject, ScanResult } from "../types/scan";
+import type { ApplyResult, RecentProject, ScanResult } from "../types/scan";
 
 function formatApiErrorDetail(detail: unknown, fallback: string): string {
   if (typeof detail === "string" && detail.trim()) {
@@ -161,6 +161,100 @@ export function subscribeScanStream(
         onError(
           "Lost connection while tracking the optimization audit. Check the backend and refresh."
         );
+      }
+    })();
+  };
+
+  return () => {
+    disposed = true;
+    es.close();
+  };
+}
+
+export async function startApply(
+  prompt: string,
+  projectPath: string
+): Promise<{ apply_id: string; status: string }> {
+  const res = await fetch("/api/apply", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ prompt, project_path: projectPath }),
+  });
+
+  if (!res.ok) {
+    const err = (await res.json().catch(() => ({ detail: res.statusText }))) as {
+      detail?: unknown;
+    };
+    throw new Error(
+      formatApiErrorDetail(err.detail, res.statusText || "Failed to start apply job")
+    );
+  }
+
+  return res.json();
+}
+
+export async function getApplyResult(applyId: string): Promise<ApplyResult> {
+  const res = await fetch(`/api/apply/${applyId}`);
+  if (!res.ok) throw new Error("Failed to fetch apply job result");
+  return res.json();
+}
+
+export function subscribeApplyStream(
+  applyId: string,
+  onOutput: (line: string) => void,
+  onComplete: () => void,
+  onFailed: (error: string) => void
+): () => void {
+  const es = new EventSource(`/api/apply/${applyId}/stream`);
+  let finished = false;
+  let disposed = false;
+
+  const parseData = (raw: string): Record<string, unknown> => {
+    try {
+      return JSON.parse(raw) as Record<string, unknown>;
+    } catch {
+      return {};
+    }
+  };
+
+  es.addEventListener("apply_output", (e) => {
+    const data = parseData(e.data);
+    if (typeof data.line === "string") {
+      onOutput(data.line);
+    }
+  });
+
+  es.addEventListener("apply_complete", () => {
+    finished = true;
+    onComplete();
+    es.close();
+  });
+
+  es.addEventListener("apply_failed", (e) => {
+    const data = parseData(e.data);
+    onFailed(typeof data.error === "string" ? data.error : "Apply failed");
+  });
+
+  es.addEventListener("stream_complete", () => {
+    finished = true;
+    es.close();
+  });
+
+  es.onerror = () => {
+    if (disposed || finished) return;
+    es.close();
+    void (async () => {
+      try {
+        const latest = await getApplyResult(applyId);
+        if (latest.status === "completed") {
+          onComplete();
+        } else if (latest.status === "failed") {
+          onFailed(latest.error || "Apply failed");
+        } else {
+          onFailed("Lost connection to apply job. It may still be running.");
+        }
+      } catch {
+        onFailed("Lost connection to apply job. Check the backend and refresh.");
       }
     })();
   };

@@ -3,7 +3,8 @@ export type AnalyzerType =
   | "prompt_caching"
   | "batching"
   | "tool_use"
-  | "structured_outputs";
+  | "structured_outputs"
+  | "model_upgrade";
 
 export type AnalyzerStatus = "pending" | "running" | "completed" | "failed";
 export type Severity = "high" | "medium" | "low";
@@ -15,6 +16,7 @@ export const ALL_ANALYZERS: AnalyzerType[] = [
   "batching",
   "tool_use",
   "structured_outputs",
+  "model_upgrade",
 ];
 
 export interface CodeLocation {
@@ -79,11 +81,13 @@ export interface ScanResult {
   status: "pending" | "running" | "completed" | "failed";
   analyzer_statuses: Record<AnalyzerType, AnalyzerStatus>;
   analyzer_errors: Partial<Record<AnalyzerType, string>>;
+  analyzer_notes: Partial<Record<AnalyzerType, string>>;
   findings: Finding[];
   scorecard: Scorecard | null;
   project_summary: ProjectSummary | null;
   project_summary_status: AnalyzerStatus;
   project_summary_error: string | null;
+  no_claude_usage: boolean;
   started_at: string | null;
   completed_at: string | null;
   error: string | null;
@@ -96,11 +100,21 @@ export interface RecentProject {
   sources: ProjectSource[];
 }
 
+export interface ApplyResult {
+  apply_id: string;
+  project_path: string;
+  status: "pending" | "running" | "completed" | "failed";
+  started_at: string | null;
+  completed_at: string | null;
+  error: string | null;
+}
+
 export const ANALYZER_LABELS: Record<AnalyzerType, string> = {
   prompt_engineering: "Prompt Engineering",
   prompt_caching: "Prompt Caching",
   batching: "Batching",
   tool_use: "Tool Use",
   structured_outputs: "Structured Outputs",
+  model_upgrade: "Model Upgrade",
 };
 
