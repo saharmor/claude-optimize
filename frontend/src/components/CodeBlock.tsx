@@ -5,11 +5,9 @@ interface Props {
   language?: string;
 }
 
-export default function CodeBlock({ code, language = "text" }: Props) {
+export default function CodeBlock({ code }: Props) {
   const [copied, setCopied] = useState(false);
   const [copyError, setCopyError] = useState("");
-  const languageLabel = language.toUpperCase();
-
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(code);
@@ -22,17 +20,12 @@ export default function CodeBlock({ code, language = "text" }: Props) {
   };
 
   return (
-    <div className="code-block-wrapper">
-      <div className="code-block-toolbar">
-        <span className="code-language">{languageLabel}</span>
-        <button type="button" className="copy-btn" onClick={handleCopy}>
-          {copied ? "Copied!" : "Copy"}
-        </button>
-      </div>
+    <div className="code-block">
+      <button type="button" className="copy-btn" onClick={handleCopy}>
+        {copied ? "Copied!" : "Copy"}
+      </button>
       {copyError && <div className="hint">{copyError}</div>}
-      <div className="code-block">
-        <pre>{code}</pre>
-      </div>
+      <pre>{code}</pre>
     </div>
   );
 }

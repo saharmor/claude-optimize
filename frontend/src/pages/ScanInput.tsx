@@ -88,9 +88,9 @@ export default function ScanInput() {
 
     try {
       const { scan_id } = await startScan(projectPath.trim());
-      navigate(`/scan/${scan_id}`);
+      navigate(`/report/${scan_id}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to start scan");
+      setError(err instanceof Error ? err.message : "Failed to start optimization audit");
     } finally {
       setLoading(false);
     }
@@ -104,16 +104,16 @@ export default function ScanInput() {
           <PageIntro
             eyebrow=""
             title="Optimize your Claude integration in minutes."
-            description="Get a prioritized and actionable report of cost, latency, and reliability improvements."
+            description="Get a prioritized and actionable optimization audit for cost, latency, and reliability improvements."
           />
         </div>
 
         <Surface className="form-surface">
           <form onSubmit={handleSubmit} className="form-layout">
             <PageIntro
-              eyebrow="Start a scan"
-              title="Scan a local project"
-              description="Point to any project that uses Claude and get an actionable optimization report in under a minute."
+              eyebrow=""
+              title="Audit a local project"
+              description="Point to any project that uses Claude and get an actionable optimization audit in under a minute."
               size="subsection"
               className="form-heading"
             />
@@ -141,6 +141,7 @@ export default function ScanInput() {
                 <div className="form-group">
                   <select
                     id="recent-project"
+                    aria-label="Select a recent project"
                     className="input-field"
                     value={selectedProjectPath}
                     onChange={handleRecentProjectChange}
@@ -163,7 +164,7 @@ export default function ScanInput() {
                   >
                     <div className="selected-project-path">
                       {selectedProject?.path ??
-                        "Choose a recent project to preview its local path before running the scan."}
+                        "Choose a recent project to preview its local path before running the audit."}
                     </div>
                   </div>
                 </div>
@@ -232,15 +233,15 @@ export default function ScanInput() {
               >
                 {loading ? (
                   <>
-                    <span className="spinner" /> Starting scan...
+                    <span className="spinner" /> Starting audit...
                   </>
                 ) : (
-                  "Run Scan"
+                  "Run Audit"
                 )}
               </Button>
               <p className="form-footnote">
-              Tip: the bundled demo project is available in the picker if you want
-              to preview a full example analysis.
+                Tip: the sample project is available in the picker if you want to
+                preview a full example audit.
               </p>
             </div>
           </form>
@@ -256,7 +257,7 @@ export default function ScanInput() {
             <h3>Cut API costs up to 80%</h3>
             <p>
               Most Claude integrations miss prompt caching, batching, and
-              structured output features that are already available. One scan
+              structured output features that are already available. One audit
               finds every opportunity.
             </p>
           </div>
