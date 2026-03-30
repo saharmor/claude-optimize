@@ -8,9 +8,8 @@
 Scan your Claude-powered app and get a prioritized optimization report
 to improve performance and reduce latency + cost
 
-<br/>
 
-<img width="761" src="frontend/src/assets/hero.png" alt="Claude Optimize preview" style="border-radius: 12px;" />
+<img width="1287" height="519" alt="Screenshot 2026-03-30 at 2 46 42 PM" src="https://github.com/user-attachments/assets/c35efb10-5946-4650-a171-e13788fb4b99" />
 
 </div>
 
