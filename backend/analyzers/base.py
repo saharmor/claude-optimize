@@ -1,18 +1,8 @@
 """Shared prompt components for all analyzers."""
 
-MODEL_PRICING_TABLE = """\
-CLAUDE MODEL PRICING REFERENCE (per million tokens):
-| Model                  | Input    | Output   | Prompt caching write | Prompt caching read | Batch input | Batch output |
-|------------------------|----------|----------|----------------------|---------------------|-------------|--------------|
-| Claude Opus 4          | $15.00   | $75.00   | $18.75               | $1.50               | $7.50       | $37.50       |
-| Claude Sonnet 4        | $3.00    | $15.00   | $3.75                | $0.30               | $1.50       | $7.50        |
-| Claude Haiku 3.5       | $0.80    | $4.00    | $1.00                | $0.08               | $0.40       | $2.00        |
+from model_registry import get_full_registry
 
-Common model identifiers:
-- Opus: "claude-opus-4-6", "claude-opus-4-20250918"
-- Sonnet: "claude-sonnet-4-6", "claude-sonnet-4-20250514"
-- Haiku: "claude-haiku-4-5-20251001", "claude-haiku-3-5-20241022"
-"""
+_MODEL_REGISTRY = get_full_registry()
 
 FINDING_SCHEMA = """\
 Each finding must be a JSON object with this exact structure:
@@ -43,7 +33,7 @@ Each finding must be a JSON object with this exact structure:
     "cost_reduction": "high | medium | low",
     "latency_reduction": "high | medium | low",
     "reliability_improvement": "high | medium | low",
-    "estimated_savings_detail": "Specific savings estimate using the ACTUAL model's pricing, e.g. '~$X/month at Y calls/day at Opus pricing ($15/MTok input)'"
+    "estimated_savings_detail": "One plain-English sentence describing the practical impact. Focus on the percentage or qualitative improvement, not raw token counts or per-MTok math. Good: 'Cuts input cost on this call by ~90% after the first request.' Bad: '~18,000 tokens saved (~$0.054 at $3/MTok input).'"
   },
   "confidence": "high | medium | low",
   "effort": "low | medium | high"
@@ -64,12 +54,19 @@ INSTRUCTIONS:
 7. Prefer a small number of high-confidence findings over a long list of speculative ones.
 
 MODEL-AWARE ANALYSIS:
-Different Claude models have very different pricing and capabilities. Your cost estimates and recommendations MUST be specific to the model actually used in each API call:
-{MODEL_PRICING_TABLE}
-- When calculating estimated savings, use the pricing for the specific model detected in that API call.
-- Reference the model by name in your estimates (e.g., "at Opus pricing" or "at Haiku pricing"), never use a generic "at Sonnet pricing" unless the code actually uses Sonnet.
-- If the model is set via an environment variable or config and you cannot determine the exact model, note this and provide estimates for the most likely model, stating your assumption.
+Different Claude models have very different pricing, capabilities, and breaking changes. Identify the model used in each API call.
 - Set the "model" field in each finding to the exact model identifier string from the code (e.g., "claude-sonnet-4-6"). If the model comes from a variable, use the variable name prefixed with "$" (e.g., "$MODEL_NAME").
+- If the model is set via an environment variable or config and you cannot determine the exact model, note this and state your assumption.
+- Before recommending any technique, cross-check the capabilities matrix below against the model the code uses. Do NOT recommend unsupported features.
+
+{_MODEL_REGISTRY}
+
+WRITING IMPACT ESTIMATES:
+- Keep estimated_savings_detail to ONE short, readable sentence.
+- Lead with the practical benefit: percentage saved, retries eliminated, latency cut.
+- Do NOT include raw token counts, per-MTok pricing breakdowns, or multi-step arithmetic. Readers want to know "what gets better" not "how many tokens times what price."
+- Good examples: "Cuts input cost on this call by ~90% after the first request." / "Eliminates retry overhead, saving ~30% of wasted calls." / "50% cost reduction on the entire batch by switching from sequential to batch API."
+- Bad examples: "saves ~18,000 input tokens (~$0.054 at claude-sonnet-4-6 pricing of $3/MTok input)" / "Removes ~1,500 tokens of tool definitions per classification call. On 10 tickets that's ~15,000 tokens saved (~$0.045)"
 
 {analysis_instructions}
 
@@ -91,6 +88,5 @@ IMPORTANT:
 - If there are multiple possible fixes, choose the one that is simplest, safest, and most aligned with Anthropic best practices.
 - Consolidate closely related issues that share the same root cause instead of emitting many small overlapping findings.
 - Avoid recommending a weaker workaround when a stronger Claude-native feature is a better fit; prefer the highest-leverage primary fix.
-- Use conservative estimates for tokens, latency, and savings. If you cannot justify an exact number from the code, use a rough range and clearly state assumptions.
-- All cost estimates must use the pricing of the actual model detected in the code, not a default or assumed model.
+- Keep impact estimates concise and human-readable. One sentence, no token math or per-MTok pricing breakdowns.
 """

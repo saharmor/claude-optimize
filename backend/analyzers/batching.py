@@ -26,12 +26,9 @@ HOW MESSAGE BATCHES WORK:
 - Ideal for any workload that doesn't need sub-second response times
 
 MODEL-SPECIFIC BATCHING CONSIDERATIONS:
-- The 50% batch discount applies to all models, but the absolute dollar savings vary greatly. Batching 1,000 calls with 2,000 input tokens each:
-  - Opus: saves ~$15/day (from $30 to $15)
-  - Sonnet: saves ~$3/day (from $6 to $3)
-  - Haiku: saves ~$0.80/day (from $1.60 to $0.80)
-- Identify the model from each API call and use its specific pricing in your savings estimates.
-- If a project uses an expensive model like Opus for batch processing, consider also recommending a model downgrade for simpler tasks — Sonnet or Haiku may suffice for classification/extraction at 5-20x lower cost.
+- The Batches API gives a flat 50% cost reduction on all models. The more expensive the model, the bigger the absolute savings.
+- If a project uses Opus for batch processing, consider also recommending a model downgrade for simpler tasks.
+- Identify the model from each API call and mention it in your finding.
 
 WHEN TO RECOMMEND BATCHING:
 - Processing > 5 independent items in a loop

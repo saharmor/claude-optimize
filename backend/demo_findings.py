@@ -89,8 +89,7 @@ Response: {"category":"shipping","priority":"medium","suggested_response":"Hi! I
             latency_reduction="medium",
             reliability_improvement="high",
             estimated_savings_detail=(
-                "Reduces retry rate from ~30% to near zero, cutting wasted tokens "
-                "and latency on malformed responses."
+                "Reduces retry rate from ~30% to near zero, cutting wasted calls and latency on malformed responses."
             ),
         ),
         confidence="high",
@@ -153,8 +152,7 @@ response = client.messages.create(
             latency_reduction="medium",
             reliability_improvement="low",
             estimated_savings_detail=(
-                "~90% cost reduction on the 2,000-token prompt after the first call. "
-                "On a batch of 10 tickets, saves ~18,000 input tokens (~$0.054 at claude-sonnet-4-6 pricing of $3/MTok input)."
+                "Cuts input cost on the system prompt by ~90% after the first request. Adds up fast on repeated calls."
             ),
         ),
         confidence="high",
@@ -244,8 +242,7 @@ def process_ticket_backlog(tickets: list[dict]) -> list[dict]:
             latency_reduction="high",
             reliability_improvement="medium",
             estimated_savings_detail=(
-                "50% token cost reduction on the entire batch. At 1,000 tickets/day "
-                "with 2,000 input tokens each, saves ~$3/day at claude-sonnet-4-6 pricing of $3/MTok input."
+                "50% cost reduction on the entire batch. The more calls you process, the bigger the savings."
             ),
         ),
         confidence="high",
@@ -315,12 +312,84 @@ response = client.messages.create(
             latency_reduction="medium",
             reliability_improvement="medium",
             estimated_savings_detail=(
-                "Removes ~1,500 tokens of tool definitions per classification call. "
-                "On 10 tickets that's ~15,000 tokens saved (~$0.045 at claude-sonnet-4-6 pricing of $3/MTok input)."
+                "Removes unnecessary tool definitions from every call, cutting input costs by 30-60% on this endpoint."
             ),
         ),
         confidence="high",
         effort="low",
+    ),
+    # -------------------------------------------------------------------------
+    # Model Upgrade
+    # -------------------------------------------------------------------------
+    Finding(
+        category=AnalyzerType.MODEL_UPGRADE,
+        model="claude-sonnet-4-5-20250514",
+        location=CodeLocation(file=_FILE, lines="196-204", function="classify_ticket"),
+        current_state=CodeSnippet(
+            description=(
+                "The API call uses claude-sonnet-4-5-20250514, an older Sonnet version. "
+                "Claude Sonnet 4.6 is available at the same price with better performance, "
+                "lower latency, and improved instruction following. Note: the code also "
+                "prefills the assistant message to force JSON output — this will return a "
+                "400 error on Sonnet 4.6, so it must be removed as part of the upgrade."
+            ),
+            code_snippet="""\
+response = client.messages.create(
+    model="claude-sonnet-4-5-20250514",   # ← outdated model version
+    max_tokens=1024,
+    system=SYSTEM_PROMPT,
+    tools=ALL_TOOLS,
+    messages=[
+        {"role": "user", "content": user_message},
+        {"role": "assistant", "content": "{"},   # ← prefill breaks on 4.6
+    ]
+)
+""",
+            language="python",
+        ),
+        recommendation=Recommendation(
+            title="Upgrade from Sonnet 4.5 to Sonnet 4.6",
+            description=(
+                "Claude Sonnet 4.6 is the latest Sonnet model at the same price "
+                "($3/MTok input, $15/MTok output) with better reasoning, lower latency, "
+                "and latest API features.\n\n"
+                "**Breaking change:** Prefilling assistant messages (used here to force JSON "
+                "output) returns a 400 error on Sonnet 4.6. Replace with structured outputs "
+                "or system prompt instructions.\n\n"
+                "**Latency note:** Sonnet 4.6 defaults to effort level 'high', which may "
+                "increase latency compared to Sonnet 4.5. Set `output_config={\"effort\": \"low\"}` "
+                "for latency-sensitive use cases."
+            ),
+            docs_url="https://platform.claude.com/docs/en/about-claude/models/migration-guide",
+        ),
+        suggested_fix=CodeSnippet(
+            description=(
+                "Upgrade model to Sonnet 4.6, remove assistant prefill, "
+                "and set effort level to control latency"
+            ),
+            code_snippet="""\
+response = client.messages.create(
+    model="claude-sonnet-4-6",            # ← upgraded to latest Sonnet
+    max_tokens=1024,
+    system=SYSTEM_PROMPT,
+    tools=ALL_TOOLS,
+    output_config={"effort": "low"},      # ← match Sonnet 4.5 latency profile
+    messages=[{"role": "user", "content": user_message}]
+    # Prefill removed — use structured outputs for guaranteed JSON
+)
+""",
+            language="python",
+        ),
+        impact=Impact(
+            cost_reduction="low",
+            latency_reduction="medium",
+            reliability_improvement="medium",
+            estimated_savings_detail=(
+                "Free upgrade: same price, better performance, and lower latency. Fewer retries from improved instruction following."
+            ),
+        ),
+        confidence="high",
+        effort="medium",
     ),
     # -------------------------------------------------------------------------
     # Structured Outputs
@@ -409,8 +478,7 @@ def classify_ticket(ticket: dict) -> dict:
             latency_reduction="medium",
             reliability_improvement="high",
             estimated_savings_detail=(
-                "Eliminates retries (each wastes ~2,000 input + 200 output tokens). "
-                "With a ~30% retry rate, saves ~660 tokens per ticket on average."
+                "Eliminates all parsing retries. With the current ~30% failure rate, that's roughly a third of calls you stop paying for twice."
             ),
         ),
         confidence="high",

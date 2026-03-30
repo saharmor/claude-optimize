@@ -13,6 +13,7 @@ class AnalyzerType(str, Enum):
     BATCHING = "batching"
     TOOL_USE = "tool_use"
     STRUCTURED_OUTPUTS = "structured_outputs"
+    MODEL_UPGRADE = "model_upgrade"
 
 
 class AnalyzerStatus(str, Enum):
@@ -101,11 +102,29 @@ class ScanResult(BaseModel):
     status: Literal["pending", "running", "completed", "failed"] = "pending"
     analyzer_statuses: dict[AnalyzerType, AnalyzerStatus] = Field(default_factory=dict)
     analyzer_errors: dict[AnalyzerType, str] = Field(default_factory=dict)
+    analyzer_notes: dict[AnalyzerType, str] = Field(default_factory=dict)
     findings: list[Finding] = Field(default_factory=list)
     scorecard: Scorecard | None = None
     project_summary: ProjectSummary | None = None
     project_summary_status: AnalyzerStatus = AnalyzerStatus.PENDING
     project_summary_error: str | None = None
+    no_claude_usage: bool = False
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    error: str | None = None
+
+
+# --- Apply request / result ---
+
+class ApplyRequest(BaseModel):
+    prompt: str = Field(..., max_length=100_000)
+    project_path: str
+
+
+class ApplyResult(BaseModel):
+    apply_id: str
+    project_path: str
+    status: Literal["pending", "running", "completed", "failed"] = "pending"
     started_at: datetime | None = None
     completed_at: datetime | None = None
     error: str | None = None

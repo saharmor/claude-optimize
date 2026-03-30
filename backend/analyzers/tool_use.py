@@ -36,12 +36,9 @@ WHY TOOL OPTIMIZATION MATTERS:
 - Scoping tools per task type can cut input token costs by 30-60%
 
 MODEL-SPECIFIC TOOL CONSIDERATIONS:
-- The cost of wasted tool tokens depends on the model's input price. Removing 1,500 tokens of unused tools on 10 calls (15,000 tokens):
-  - Opus: saves ~$0.225
-  - Sonnet: saves ~$0.045
-  - Haiku: saves ~$0.012
-- More capable models (Opus) are better at selecting the right tool from a larger set, but the token cost is also much higher — scoping tools is even more important for expensive models.
-- Identify the model from each API call and use its specific pricing in your estimates.
+- Unused tool definitions waste input tokens on every call. The more expensive the model, the bigger the waste.
+- Scoping tools to only what's needed can cut input costs by 30-60% on tool-heavy calls.
+- Identify the model from each API call and mention it in your finding.
 
 DOCS REFERENCES:
 - Tool use overview: https://docs.anthropic.com/en/docs/build-with-claude/tool-use/overview
