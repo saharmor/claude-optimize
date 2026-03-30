@@ -1,10 +1,13 @@
 <div align="center">
 
-# Claude Optimize
+<h1>
+  <img src="frontend/public/sparkles-icon.svg" alt="Sparkles icon" width="24" />
+  Claude Optimize
+</h1>
 
-Find the biggest wins in your Claude integration.
+Scan your Claude-powered app and get a prioritized optimization report 
+to improve performance and reduce latency + cost
 
-<img src="frontend/src/assets/hero.png" alt="Claude Optimize hero" width="200" />
 
 </div>
 
@@ -16,28 +19,56 @@ Find the biggest wins in your Claude integration.
 - **Tool use**: kitchen-sink tool lists, oversized tool definitions, and poor tool scoping
 - **Structured outputs**: regex parsing, brittle `json.loads()` flows, and text-only schema enforcement
 
-## Run In <1 Min
+## Quick Start
 
-- Python 3.11+
-- Node.js 20.19+ or 22.12+
-- [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) installed and authenticated
-- Add your `ANTHROPIC_API_KEY` to `.env`
+Copy-paste this prompt into Claude Code, Cursor, or any AI coding agent:
+
+> Clone https://github.com/saharmor/claude-optimize, create a `.env` file with my `ANTHROPIC_API_KEY`, run `./start-dev.sh`, and open the frontend URL in my browser.
+
+That's it — the agent will handle cloning, installing dependencies (Python 3.11+, Node.js 20+), and starting both servers.
+
+### Manual Setup
+
+If you prefer to set things up yourself:
 
 ```bash
-cp .env.example .env
+git clone https://github.com/saharmor/claude-optimize.git
+cd claude-optimize
+cp .env.example .env        # add your ANTHROPIC_API_KEY
 ./start-dev.sh
 ```
 
-That script:
+Requires Python 3.11+, Node.js 20.19+ or 22.12+, and the [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) installed and authenticated.
 
-- Loads `.env` if present
-- Creates the backend virtual environment
-- Installs backend dependencies
-- Installs frontend dependencies
-- Starts the backend on `http://localhost:8000`
-- Starts the frontend on `http://localhost:5173`
+The start script creates a virtual environment, installs all dependencies, and starts:
+- Backend on `http://localhost:8000`
+- Frontend on `http://localhost:5173`
 
 Then open `http://localhost:5173`, enter a local project path, and run a scan.
+
+## Run via Claude Code
+
+Skip the web UI entirely — run the optimizer as a slash command in Claude Code from any project:
+
+```bash
+# One-time setup: copy the command to your global Claude commands
+mkdir -p ~/.claude/commands
+cp commands/optimize.md ~/.claude/commands/
+```
+
+Then open Claude Code in any project and run:
+
+```
+/user:optimize
+```
+
+This will analyze your Claude API usage across 6 categories, apply high-confidence fixes directly to your code, and generate an `OPTIMIZE_REPORT.md` summarizing what changed and why.
+
+To get a report without applying any changes:
+
+```
+/user:optimize --report-only
+```
 
 ## Sample Project
 
