@@ -29,7 +29,7 @@ export default function PageIntro({
 
   return (
     <div className={wrapperClassName}>
-      <p className="eyebrow">{eyebrow}</p>
+      {eyebrow && <p className="eyebrow">{eyebrow}</p>}
       <TitleTag className={titleClassName}>{title}</TitleTag>
       <p className={copyClassName}>{description}</p>
       {children}

@@ -8,7 +8,6 @@ interface Props {
   focusKey?: string | null;
   isSelected?: boolean;
   onToggle?: () => void;
-  showCheckboxHint?: boolean;
 }
 
 function buildEditorUrl(
@@ -25,17 +24,10 @@ function buildEditorUrl(
   return `${scheme}://file${encodeURI(absolutePath)}:${line}`;
 }
 
-export default function FindingCard({ finding, projectPath, focusKey, isSelected, onToggle, showCheckboxHint }: Props) {
+export default function FindingCard({ finding, projectPath, focusKey, isSelected, onToggle }: Props) {
   const [expanded, setExpanded] = useState(false);
   const [showMetricsHelp, setShowMetricsHelp] = useState(false);
-  const [hintVisible, setHintVisible] = useState(!!showCheckboxHint);
   const cardRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!hintVisible) return;
-    const timer = setTimeout(() => setHintVisible(false), 4000);
-    return () => clearTimeout(timer);
-  }, [hintVisible]);
 
   useEffect(() => {
     if (!showMetricsHelp) return;
@@ -67,7 +59,6 @@ export default function FindingCard({ finding, projectPath, focusKey, isSelected
     }
   }, [focusKey, findingKey]);
 
-  const locationLabel = `${finding.location.file}${finding.location.lines ? `:${finding.location.lines}` : ""}`;
 
   return (
     <div className="finding-card" ref={cardRef}>
@@ -83,24 +74,46 @@ export default function FindingCard({ finding, projectPath, focusKey, isSelected
                 type="checkbox"
                 className="finding-checkbox"
                 checked={!!isSelected}
-                onChange={() => { onToggle(); setHintVisible(false); }}
+                onChange={() => onToggle()}
                 onClick={(e) => e.stopPropagation()}
                 aria-label={`Select "${finding.recommendation.title}"`}
               />
-              {hintVisible && (
-                <span className="finding-checkbox-hint">Select findings to apply</span>
-              )}
             </div>
           )}
           <div className="finding-collapsed-left-text">
             <div className="finding-title">{finding.recommendation.title}</div>
-            <div className="finding-collapsed-meta">
-              <span className="finding-location-text">{locationLabel}</span>
-              {finding.model && (
-                <>
-                  <span className="finding-meta-separator">·</span>
-                  <span className="finding-model-label">{finding.model}</span>
-                </>
+            <div className="finding-collapsed-impact">
+              <div className="finding-impact-row finding-impact-row--compact">
+                <span className="finding-impact-item">
+                  Cost saving <strong className={`impact-${finding.impact.cost_reduction}`}>{finding.impact.cost_reduction}</strong>
+                </span>
+                <span className="finding-impact-item">
+                  Latency reduction <strong className={`impact-${finding.impact.latency_reduction}`}>{finding.impact.latency_reduction}</strong>
+                </span>
+                <span className="finding-impact-item">
+                  Stability improvement <strong className={`impact-${finding.impact.reliability_improvement}`}>{finding.impact.reliability_improvement}</strong>
+                </span>
+                <span className="finding-impact-item">
+                  Effort <strong className={`effort-${finding.effort}`}>{finding.effort}</strong>
+                </span>
+                <span className="finding-impact-item">
+                  Confidence <strong className={`confidence-${finding.confidence}`}>{finding.confidence}</strong>
+                </span>
+                <span
+                  role="button"
+                  tabIndex={0}
+                  className="metrics-help-btn"
+                  onClick={(e) => { e.stopPropagation(); setShowMetricsHelp(true); }}
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.stopPropagation(); e.preventDefault(); setShowMetricsHelp(true); } }}
+                  aria-label="What do these metrics mean?"
+                >
+                  ?
+                </span>
+              </div>
+              {finding.impact.estimated_savings_detail && (
+                <p className="finding-savings finding-savings--compact">
+                  {finding.impact.estimated_savings_detail}
+                </p>
               )}
             </div>
           </div>
@@ -118,80 +131,47 @@ export default function FindingCard({ finding, projectPath, focusKey, isSelected
         </div>
       </button>
 
-      {expanded && (
-        <div className="finding-expanded">
-          <div className="finding-impact-strip">
-            <div className="finding-impact-row">
-              <span className="finding-impact-item">
-                Cost saving <strong className={`impact-${finding.impact.cost_reduction}`}>{finding.impact.cost_reduction}</strong>
-              </span>
-              <span className="finding-impact-item">
-                Latency reduction <strong className={`impact-${finding.impact.latency_reduction}`}>{finding.impact.latency_reduction}</strong>
-              </span>
-              <span className="finding-impact-item">
-                Stability improvement <strong className={`impact-${finding.impact.reliability_improvement}`}>{finding.impact.reliability_improvement}</strong>
-              </span>
-              <span className="finding-impact-item">
-                Effort <strong className={`effort-${finding.effort}`}>{finding.effort}</strong>
-              </span>
-              <span className="finding-impact-item">
-                Confidence <strong>{finding.confidence}</strong>
-              </span>
+      {showMetricsHelp && (
+        <div className="metrics-modal-backdrop" onClick={() => setShowMetricsHelp(false)} role="dialog" aria-modal="true" aria-labelledby="metrics-modal-title">
+          <div className="metrics-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="metrics-modal-header">
+              <h3 id="metrics-modal-title" className="metrics-modal-title">Understanding metrics</h3>
               <button
                 type="button"
-                className="metrics-help-btn"
-                onClick={() => setShowMetricsHelp(true)}
-                aria-label="What do these metrics mean?"
+                className="metrics-modal-close"
+                onClick={() => setShowMetricsHelp(false)}
               >
-                ?
+                &times;
               </button>
             </div>
-            {finding.impact.estimated_savings_detail && (
-              <p className="finding-savings">
-                {finding.impact.estimated_savings_detail}
-              </p>
-            )}
-          </div>
-
-          {showMetricsHelp && (
-            <div className="metrics-modal-backdrop" onClick={() => setShowMetricsHelp(false)} role="dialog" aria-modal="true" aria-labelledby="metrics-modal-title">
-              <div className="metrics-modal" onClick={(e) => e.stopPropagation()}>
-                <div className="metrics-modal-header">
-                  <h3 id="metrics-modal-title" className="metrics-modal-title">Understanding metrics</h3>
-                  <button
-                    type="button"
-                    className="metrics-modal-close"
-                    onClick={() => setShowMetricsHelp(false)}
-                  >
-                    &times;
-                  </button>
-                </div>
-                <dl className="metrics-modal-list">
-                  <div className="metrics-modal-item">
-                    <dt>Cost saving</dt>
-                    <dd>How much this change could reduce your API spend. <em>Higher is better.</em></dd>
-                  </div>
-                  <div className="metrics-modal-item">
-                    <dt>Latency reduction</dt>
-                    <dd>Expected reduction in response time and round-trips. <em>Higher is better.</em></dd>
-                  </div>
-                  <div className="metrics-modal-item">
-                    <dt>Stability improvement</dt>
-                    <dd>Improvement in output consistency: fewer retries and malformed responses. <em>Higher is better.</em></dd>
-                  </div>
-                  <div className="metrics-modal-item">
-                    <dt>Effort</dt>
-                    <dd>How much work is needed to implement this change. <em>Lower is better.</em></dd>
-                  </div>
-                  <div className="metrics-modal-item">
-                    <dt>Confidence</dt>
-                    <dd>How confident we are this recommendation applies correctly to your code. <em>Higher is better.</em></dd>
-                  </div>
-                </dl>
+            <dl className="metrics-modal-list">
+              <div className="metrics-modal-item">
+                <dt>Cost saving</dt>
+                <dd>How much this change could reduce your API spend. <em>Higher is better.</em></dd>
               </div>
-            </div>
-          )}
+              <div className="metrics-modal-item">
+                <dt>Latency reduction</dt>
+                <dd>Expected reduction in response time and round-trips. <em>Higher is better.</em></dd>
+              </div>
+              <div className="metrics-modal-item">
+                <dt>Stability improvement</dt>
+                <dd>Improvement in output consistency: fewer retries and malformed responses. <em>Higher is better.</em></dd>
+              </div>
+              <div className="metrics-modal-item">
+                <dt>Effort</dt>
+                <dd>How much work is needed to implement this change. <em>Lower is better.</em></dd>
+              </div>
+              <div className="metrics-modal-item">
+                <dt>Confidence</dt>
+                <dd>How confident we are this recommendation applies correctly to your code. <em>Higher is better.</em></dd>
+              </div>
+            </dl>
+          </div>
+        </div>
+      )}
 
+      {expanded && (
+        <div className="finding-expanded">
           <div className="finding-section">
             <div className="finding-section-label">Current code</div>
             <p className="finding-description">

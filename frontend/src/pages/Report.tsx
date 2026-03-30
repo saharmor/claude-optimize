@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { getScanResult, subscribeScanStream } from "../api/client";
+import { getScanResult, startApply, subscribeScanStream } from "../api/client";
 import type { ScanResult, AnalyzerType, AnalyzerStatus, Finding } from "../types/scan";
 import { ALL_ANALYZERS, ANALYZER_LABELS } from "../types/scan";
 import { getFindingKey } from "../utils/findingKey";
@@ -9,7 +9,10 @@ import Scorecard from "../components/Scorecard";
 import AnalyzerSection from "../components/AnalyzerSection";
 import SelectionBar from "../components/SelectionBar";
 import PromptModal from "../components/PromptModal";
-import { Button, EmptyState, ScanProgressBar, Surface } from "../components/ui";
+import ApplyConfirmModal from "../components/ApplyConfirmModal";
+import ApplyProgress from "../components/ApplyProgress";
+import ShareModal from "../components/ShareModal";
+import { Button, EmptyState, ScanProgressBar } from "../components/ui";
 
 const SEVERITY_ORDER: Record<string, number> = {
   high: 0,
@@ -54,7 +57,11 @@ export default function Report() {
   const [focusKey, setFocusKey] = useState<string | null>(null);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const [showPromptModal, setShowPromptModal] = useState(false);
-  const [bannerDismissed, setBannerDismissed] = useState(false);
+  const [applyState, setApplyState] = useState<null | "confirm" | "running" | "completed" | "failed">(null);
+  const [applyId, setApplyId] = useState<string | null>(null);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [progressFadingOut, setProgressFadingOut] = useState(false);
+  const [progressVisible, setProgressVisible] = useState(false);
 
   const handleJumpToFinding = useCallback((category: string, title: string) => {
     setFocusKey(`${category}:${title}`);
@@ -79,6 +86,61 @@ export default function Report() {
   const handleGeneratePrompt = useCallback(() => {
     setShowPromptModal(true);
   }, []);
+
+  const handleApply = useCallback(() => {
+    setApplyState("confirm");
+  }, []);
+
+  const getSelectedPrompt = useCallback(() => {
+    if (!scan) return "";
+    return generatePrompt(
+      scan.project_path,
+      scan.project_summary?.one_liner ?? null,
+      scan.findings.filter((f) => selectedKeys.has(getFindingKey(f)))
+    );
+  }, [scan, selectedKeys]);
+
+  const handleApplyRun = useCallback(async () => {
+    if (!scan) return;
+    setApplyState("running");
+    try {
+      const { apply_id } = await startApply(getSelectedPrompt(), scan.project_path);
+      setApplyId(apply_id);
+    } catch {
+      setApplyState(null);
+      setError("Failed to start apply job. Please try again.");
+    }
+  }, [scan, getSelectedPrompt]);
+
+  const handleApplyBack = useCallback(() => {
+    setApplyState(null);
+    setApplyId(null);
+  }, []);
+
+  const handleApplyRetry = useCallback(() => {
+    setApplyState("confirm");
+    setApplyId(null);
+  }, []);
+
+  // Manage progress bar fade-out when scan finishes
+  useEffect(() => {
+    if (!scan) return;
+    const isLive = scan.status === "running" ||
+      scan.project_summary_status === "pending" ||
+      scan.project_summary_status === "running";
+
+    if (isLive && !progressVisible) {
+      setProgressVisible(true);
+      setProgressFadingOut(false);
+    } else if (!isLive && progressVisible && !progressFadingOut) {
+      setProgressFadingOut(true);
+      const timer = setTimeout(() => {
+        setProgressVisible(false);
+        setProgressFadingOut(false);
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [scan, progressVisible, progressFadingOut]);
 
   useEffect(() => {
     if (!scanId) return;
@@ -145,6 +207,7 @@ export default function Report() {
         }
 
         if (event === "analyzer_complete" && isAnalyzerType(analyzer)) {
+          const note = typeof data.note === "string" ? data.note : undefined;
           setScan((prev) =>
             prev
               ? {
@@ -153,6 +216,9 @@ export default function Report() {
                     ...prev.analyzer_statuses,
                     [analyzer]: "completed",
                   },
+                  ...(note
+                    ? { analyzer_notes: { ...prev.analyzer_notes, [analyzer]: note } }
+                    : {}),
                 }
               : prev
           );
@@ -269,7 +335,7 @@ export default function Report() {
         title="Error"
         description={error || "Optimization audit not found"}
         action={
-          <Button variant="primary" onClick={() => navigate("/")}>
+          <Button variant="primary" onClick={() => { navigate("/"); window.scrollTo(0, 0); }}>
             Start New Audit
           </Button>
         }
@@ -284,6 +350,7 @@ export default function Report() {
     batching: [],
     tool_use: [],
     structured_outputs: [],
+    model_upgrade: [],
   };
 
   for (const finding of scan.findings) {
@@ -300,27 +367,38 @@ export default function Report() {
     );
   }
 
-  const categoriesWithFindings = ALL_ANALYZERS.filter(
-    (analyzer) => findingsByCategory[analyzer].length > 0
-  );
-  const cleanCategories = ALL_ANALYZERS.filter(
-    (analyzer) =>
-      scan.analyzer_statuses[analyzer] === "completed" &&
-      findingsByCategory[analyzer].length === 0
+  const completedAnalyzers = ALL_ANALYZERS.filter(
+    (analyzer) => scan.analyzer_statuses[analyzer] === "completed"
+  ).sort((a, b) => findingsByCategory[b].length - findingsByCategory[a].length);
+  const cleanCategories = completedAnalyzers.filter(
+    (analyzer) => findingsByCategory[analyzer].length === 0
   );
   const hasFindings = scan.findings.length > 0;
   const completedCount = Object.values(scan.analyzer_statuses).filter(
     (status) => status === "completed"
   ).length;
-  const failedCount = Object.values(scan.analyzer_statuses).filter(
-    (status) => status === "failed"
-  ).length;
   const auditRunning = scan.status === "running";
+  const noClaudeUsage = scan.no_claude_usage === true;
   const summaryRunning =
     scan.project_summary_status === "pending" || scan.project_summary_status === "running";
-  const showLiveStatus = !streamComplete && (auditRunning || summaryRunning);
   const hasPartialFailure = Boolean(scan.error) && scan.status === "completed";
   const projectName = formatProjectName(scan.project_path);
+  const failedAnalyzers = ALL_ANALYZERS.filter(
+    (a) => scan.analyzer_statuses[a] === "failed"
+  );
+  // Group failed analyzers by their error message so we don't repeat the same error 6 times
+  const errorGroups: { error: string; analyzers: string[] }[] = [];
+  for (const a of failedAnalyzers) {
+    const err = scan.analyzer_errors[a] || "Unknown error";
+    const existing = errorGroups.find((g) => g.error === err);
+    if (existing) {
+      existing.analyzers.push(ANALYZER_LABELS[a]);
+    } else {
+      errorGroups.push({ error: err, analyzers: [ANALYZER_LABELS[a]] });
+    }
+  }
+
+  const allSameError = errorGroups.length === 1 && failedAnalyzers.length === ALL_ANALYZERS.length;
   const emptyStateTitle =
     scan.status === "failed"
       ? "Optimization audit failed"
@@ -329,16 +407,52 @@ export default function Report() {
         : "No findings";
   const emptyStateDescription =
     scan.status === "failed"
-      ? scan.error || "An unknown error occurred"
+      ? allSameError
+        ? `All analyzers failed with the same error.`
+        : scan.error || "An unknown error occurred"
       : hasPartialFailure
         ? "Some analyzers failed before they could return results, so this optimization audit finished without any confirmed findings. Review the error details and try again after fixing the project setup."
         : "Your codebase looks well-optimized. No issues were detected in this optimization audit.";
   const projectSummary = scan.project_summary;
   const showSummaryLoading = summaryRunning && !projectSummary;
 
+  const selectedFindings = scan.findings.filter((f) => selectedKeys.has(getFindingKey(f)));
+
+  if (applyState && applyState !== "confirm" && applyId) {
+    return (
+      <>
+        <div className="report-container">
+          <div className="apply-progress-overlay">
+            <ApplyProgress
+              applyId={applyId}
+              projectPath={scan.project_path}
+              findings={selectedFindings}
+              onBack={handleApplyBack}
+              onRetry={handleApplyRetry}
+              onShare={() => setShowShareModal(true)}
+            />
+          </div>
+        </div>
+        {showShareModal && (
+          <ShareModal
+            scan={scan}
+            projectName={projectName}
+            onClose={() => setShowShareModal(false)}
+          />
+        )}
+      </>
+    );
+  }
+
   return (
     <div className="report-container">
       <header className="page-header-block report-project-header">
+        <button
+          className="back-button"
+          onClick={() => { navigate("/"); window.scrollTo(0, 0); }}
+        >
+          ← Back
+        </button>
         <h1 className="page-title">{projectName}</h1>
         {projectSummary && (
           <>
@@ -351,61 +465,69 @@ export default function Report() {
         {showSummaryLoading && (
           <p className="report-project-loading">
             <span className="spinner report-project-spinner" aria-hidden="true" />
-            <span>Analyzing project to generate description</span>
-            <span className="report-project-loading-dots">...</span>
+            <span>Analyzing project to generate description...</span>
           </p>
         )}
       </header>
 
-      {scan.error && hasFindings && scan.status === "completed" && (
-        <div className="error-message">{scan.error}</div>
-      )}
-
-      {showLiveStatus && (
-        <ScanProgressBar
-          completed={completedCount}
-          total={ALL_ANALYZERS.length}
-          remainingAnalyzers={ALL_ANALYZERS.filter(
-            (a) => scan.analyzer_statuses[a] === "pending" || scan.analyzer_statuses[a] === "running"
-          ).map((a) => ANALYZER_LABELS[a])}
+      {noClaudeUsage ? (
+        <EmptyState
+          className="fade-in-up"
+          title="No Claude API usage detected"
+          description="This project doesn't appear to use the Anthropic Claude API. The audit analyzes Claude API calls for optimization opportunities and won't produce findings for projects using other LLM providers."
         />
-      )}
-
-      {streamError && <div className="error-message">{streamError}</div>}
-
-      {scan.scorecard && hasFindings && <Scorecard scorecard={scan.scorecard} onJumpToFinding={handleJumpToFinding} />}
-
-      {!hasFindings ? (
-        auditRunning ? (
-          <Surface className="report-placeholder">
-            <h2 className="section-subtitle">Findings will appear here</h2>
-            <p className="section-copy">
-              Claude is still analyzing the project. This page updates automatically as
-              each analyzer finishes.
-            </p>
-          </Surface>
-        ) : (
-          <EmptyState title={emptyStateTitle} description={emptyStateDescription} />
-        )
       ) : (
         <>
-          {!bannerDismissed && selectedKeys.size === 0 && (
-            <div className="selection-banner">
-              <span className="selection-banner-text">
-                Select findings below to generate a handoff prompt for your coding agent
-              </span>
-              <button
-                type="button"
-                className="selection-banner-dismiss"
-                onClick={() => setBannerDismissed(true)}
-                aria-label="Dismiss"
-              >
-                &times;
-              </button>
+          {scan.error && hasFindings && scan.status === "completed" && (
+            <div className="error-message">
+              <p>{scan.error}</p>
+              {errorGroups.length > 0 && (
+                <ul className="analyzer-errors-inline">
+                  {errorGroups.map((group, i) => (
+                    <li key={i}>
+                      <strong>
+                        {group.analyzers.length === ALL_ANALYZERS.length
+                          ? "All analyzers"
+                          : group.analyzers.join(", ")}
+                        :
+                      </strong>{" "}
+                      {group.error}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           )}
 
-          {categoriesWithFindings.map((analyzer, index) => (
+          {progressVisible && (
+            <div className={progressFadingOut ? "fade-out" : ""}>
+              <ScanProgressBar
+                completed={completedCount}
+                total={ALL_ANALYZERS.length}
+                remainingAnalyzers={ALL_ANALYZERS.filter(
+                  (a) => scan.analyzer_statuses[a] === "pending" || scan.analyzer_statuses[a] === "running"
+                ).map((a) => ANALYZER_LABELS[a])}
+              />
+            </div>
+          )}
+
+          {streamError && <div className="error-message">{streamError}</div>}
+
+          {scan.scorecard && hasFindings && (
+            <Scorecard
+              scorecard={scan.scorecard}
+              onJumpToFinding={handleJumpToFinding}
+              onShare={streamComplete ? () => setShowShareModal(true) : undefined}
+            />
+          )}
+
+          {hasFindings && (
+            <p className="selection-helper-text">
+              Review the findings and select the ones you want to fix
+            </p>
+          )}
+
+          {completedAnalyzers.map((analyzer) => (
             <AnalyzerSection
               key={analyzer}
               analyzer={analyzer}
@@ -414,23 +536,69 @@ export default function Report() {
               focusKey={focusKey}
               selectedKeys={selectedKeys}
               onToggleFinding={toggleFinding}
-              showCheckboxHint={index === 0 && !bannerDismissed && selectedKeys.size === 0}
             />
           ))}
 
-          {scan.status === "completed" && failedCount === 0 && cleanCategories.length > 0 && (
-            <Surface tone="muted" className="muted-summary">
-              <p className="eyebrow">No issues detected</p>
-              <p className="muted-summary-copy">
-                {cleanCategories.map((analyzer) => ANALYZER_LABELS[analyzer]).join(", ")}
-              </p>
-            </Surface>
+          {!hasFindings && !auditRunning && (cleanCategories.length === 0 || errorGroups.length > 0) && (
+            <>
+              <EmptyState title={emptyStateTitle} description={emptyStateDescription} />
+              {errorGroups.length > 0 && (
+                <div className="analyzer-errors-detail">
+                  <h3 className="analyzer-errors-heading">Error details</h3>
+                  <ul className="analyzer-errors-list">
+                    {errorGroups.map((group, i) => (
+                      <li key={i} className="analyzer-error-item">
+                        <strong>
+                          {group.analyzers.length === ALL_ANALYZERS.length
+                            ? "All analyzers"
+                            : group.analyzers.join(", ")}
+                        </strong>
+                        <span className="analyzer-error-text">{group.error}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="analyzer-errors-help">
+                    <p className="analyzer-errors-help-title">Troubleshooting</p>
+                    <ul className="analyzer-errors-help-list">
+                      {errorGroups.some((g) => g.error.includes("No such file or directory")) && (
+                        <li>
+                          The <code>claude</code> CLI was not found. Install it
+                          with <code>npm install -g @anthropic-ai/claude-code</code> and
+                          make sure it's in your PATH.
+                        </li>
+                      )}
+                      {errorGroups.some((g) => g.error.includes("timed out")) && (
+                        <li>
+                          One or more analyzers timed out. Try increasing the
+                          timeout or scanning a smaller project.
+                        </li>
+                      )}
+                      {errorGroups.some((g) => g.error.includes("permission")) && (
+                        <li>
+                          Permission error. Set the <code>CLAUDE_OPTIMIZE_SKIP_PERMISSIONS=true</code> environment
+                          variable before starting the server.
+                        </li>
+                      )}
+                      <li>
+                        Verify the CLI works by running <code>claude --version</code> in
+                        your terminal, then restart the server.
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </>
       )}
 
       <div className="report-actions">
-        <Button variant="primary" onClick={() => navigate("/")}>
+        {hasFindings && streamComplete && (
+          <Button variant="secondary" onClick={() => setShowShareModal(true)}>
+            Share Results
+          </Button>
+        )}
+        <Button variant="primary" onClick={() => { navigate("/"); window.scrollTo(0, 0); }}>
           New Audit
         </Button>
       </div>
@@ -438,6 +606,7 @@ export default function Report() {
       <SelectionBar
         count={selectedKeys.size}
         onGeneratePrompt={handleGeneratePrompt}
+        onApply={handleApply}
         onClear={clearSelection}
       />
 
@@ -449,6 +618,22 @@ export default function Report() {
             scan.findings.filter((f) => selectedKeys.has(getFindingKey(f)))
           )}
           onClose={() => setShowPromptModal(false)}
+        />
+      )}
+
+      {applyState === "confirm" && (
+        <ApplyConfirmModal
+          findingCount={selectedKeys.size}
+          onRun={handleApplyRun}
+          onCancel={() => setApplyState(null)}
+        />
+      )}
+
+      {showShareModal && (
+        <ShareModal
+          scan={scan}
+          projectName={projectName}
+          onClose={() => setShowShareModal(false)}
         />
       )}
     </div>

@@ -2,6 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getRecentProjects, startScan } from "../api/client";
 import claudeLogo from "../assets/claude-logo.svg";
+import garyTanPhoto from "../assets/gary-tan.jpg";
+import magnusMuellerPhoto from "../assets/magnus-mueller.jpg";
+import jerryLiuPhoto from "../assets/jerry-liu.jpg";
 import { Button, PageIntro, Surface } from "../components/ui";
 import type { RecentProject } from "../types/scan";
 
@@ -156,18 +159,15 @@ export default function ScanInput() {
                   </select>
                 </div>
 
-                <div className="selected-project-slot" aria-live="polite">
-                  <div
-                    className={`selected-project-card${
-                      selectedProject ? "" : " selected-project-card-placeholder"
-                    }`}
-                  >
-                    <div className="selected-project-path">
-                      {selectedProject?.path ??
-                        "Choose a recent project to preview its local path before running the audit."}
+                {selectedProject && (
+                  <div className="selected-project-slot" aria-live="polite">
+                    <div className="selected-project-card">
+                      <div className="selected-project-path">
+                        {selectedProject.path}
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
 
                 <div className="project-input-actions">
                   <button
@@ -239,13 +239,59 @@ export default function ScanInput() {
                   "Run Audit"
                 )}
               </Button>
-              <p className="form-footnote">
-                Tip: the sample project is available in the picker if you want to
-                preview a full example audit.
-              </p>
             </div>
           </form>
+
+          <div className="cli-hint">
+            Prefer the terminal? Run{' '}
+            <code>/user:optimize</code> in Claude Code.{' '}
+            <a
+              href="https://github.com/saharmor/claude-optimize#run-via-claude-code"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Set up in 30 seconds &rarr;
+            </a>
+          </div>
         </Surface>
+      </div>
+
+      <div className="landing-testimonials">
+        <h2 className="testimonials-heading">Trusted by engineering leaders</h2>
+        <div className="testimonials-grid">
+          <div className="testimonial-card">
+            <img src={garyTanPhoto} alt="Garry Tan" className="testimonial-photo" />
+            <blockquote className="testimonial-quote">
+              "I ran Claude Optimize on gstack and it cut our API costs by a
+              double-digit percentage while reducing latency and improving
+              performance. Minutes to actionable fixes."
+            </blockquote>
+            <div className="testimonial-author">Garry Tan</div>
+            <div className="testimonial-role">President &amp; CEO, Y Combinator</div>
+          </div>
+
+          <div className="testimonial-card">
+            <img src={magnusMuellerPhoto} alt="Magnus Müller" className="testimonial-photo" />
+            <blockquote className="testimonial-quote">
+              "We ran the audit on our browser agent and shipped the recommended
+              prompt caching changes in an afternoon. Response times dropped and
+              our API bill shrank immediately."
+            </blockquote>
+            <div className="testimonial-author">Magnus Müller</div>
+            <div className="testimonial-role">Co-founder &amp; CEO, Browser Use (YC W25)</div>
+          </div>
+
+          <div className="testimonial-card">
+            <img src={jerryLiuPhoto} alt="Jerry Liu" className="testimonial-photo" />
+            <blockquote className="testimonial-quote">
+              "As heavy users of LLM APIs, we're always looking for optimization
+              wins. Claude Optimize surfaced batching and caching opportunities
+              we had completely overlooked."
+            </blockquote>
+            <div className="testimonial-author">Jerry Liu</div>
+            <div className="testimonial-role">Co-founder &amp; CEO, LlamaIndex (YC S23)</div>
+          </div>
+        </div>
       </div>
 
       <div className="landing-steps">
@@ -282,7 +328,7 @@ export default function ScanInput() {
           <div className="step-content">
             <h3>Powered by Claude Code</h3>
             <p>
-              Five parallel Claude Code sessions, each with specialized
+              Six parallel Claude Code sessions, each with specialized
               analysis prompts written by Anthropic's engineers.
             </p>
           </div>

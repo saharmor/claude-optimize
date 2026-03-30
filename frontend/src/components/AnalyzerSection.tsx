@@ -12,10 +12,9 @@ interface Props {
   focusKey?: string | null;
   selectedKeys?: Set<string>;
   onToggleFinding?: (key: string) => void;
-  showCheckboxHint?: boolean;
 }
 
-export default function AnalyzerSection({ analyzer, findings, projectPath, focusKey, selectedKeys, onToggleFinding, showCheckboxHint }: Props) {
+export default function AnalyzerSection({ analyzer, findings, projectPath, focusKey, selectedKeys, onToggleFinding }: Props) {
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
@@ -23,6 +22,25 @@ export default function AnalyzerSection({ analyzer, findings, projectPath, focus
       setOpen(true);
     }
   }, [focusKey, analyzer]);
+
+  const isEmpty = findings.length === 0;
+
+  if (isEmpty) {
+    return (
+      <div className="analyzer-section analyzer-section-clean">
+        <div className="analyzer-section-header analyzer-section-header-static">
+          <div className="analyzer-section-left">
+            <span className="analyzer-section-title">
+              {ANALYZER_LABELS[analyzer]}
+            </span>
+            <Pill tone="neutral" className="finding-count">
+              No issues found
+            </Pill>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="analyzer-section">
@@ -44,26 +62,20 @@ export default function AnalyzerSection({ analyzer, findings, projectPath, focus
 
       {open && (
         <div className="analyzer-section-body">
-          {findings.length === 0 ? (
-            <p className="analyzer-empty-copy">
-              No issues found. Your code looks good in this area.
-            </p>
-          ) : (
-            findings.map((finding, index) => {
-              const key = getFindingKey(finding);
-              return (
-                <FindingCard
-                  key={key}
-                  finding={finding}
-                  projectPath={projectPath}
-                  focusKey={focusKey}
-                  isSelected={selectedKeys?.has(key)}
-                  onToggle={onToggleFinding ? () => onToggleFinding(key) : undefined}
-                  showCheckboxHint={index === 0 && showCheckboxHint}
-                />
-              );
-            })
-          )}
+          {findings.map((finding, index) => {
+            const key = getFindingKey(finding);
+            return (
+              <FindingCard
+                key={key}
+                finding={finding}
+                projectPath={projectPath}
+                focusKey={focusKey}
+                isSelected={selectedKeys?.has(key)}
+                onToggle={onToggleFinding ? () => onToggleFinding(key) : undefined}
+
+              />
+            );
+          })}
         </div>
       )}
     </div>

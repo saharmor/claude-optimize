@@ -1,10 +1,11 @@
 interface Props {
   count: number;
   onGeneratePrompt: () => void;
+  onApply: () => void;
   onClear: () => void;
 }
 
-export default function SelectionBar({ count, onGeneratePrompt, onClear }: Props) {
+export default function SelectionBar({ count, onGeneratePrompt, onApply, onClear }: Props) {
   if (count === 0) return null;
 
   return (
@@ -22,6 +23,14 @@ export default function SelectionBar({ count, onGeneratePrompt, onClear }: Props
           onClick={onGeneratePrompt}
         >
           Generate coding prompt
+        </button>
+        <button
+          type="button"
+          className="selection-bar-apply"
+          onClick={onApply}
+        >
+          Apply
+          <span aria-hidden="true" style={{ marginLeft: 6 }}>&rarr;</span>
         </button>
       </div>
     </div>

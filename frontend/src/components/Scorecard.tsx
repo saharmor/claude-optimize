@@ -4,9 +4,10 @@ import { ANALYZER_LABELS } from "../types/scan";
 interface Props {
   scorecard: ScorecardType;
   onJumpToFinding?: (category: string, title: string) => void;
+  onShare?: () => void;
 }
 
-export default function Scorecard({ scorecard, onJumpToFinding }: Props) {
+export default function Scorecard({ scorecard, onJumpToFinding, onShare }: Props) {
   if (scorecard.top_wins.length === 0) {
     return null;
   }
@@ -17,6 +18,11 @@ export default function Scorecard({ scorecard, onJumpToFinding }: Props) {
         <h2 id="top-wins-title" className="section-subtitle">
          Highest-impact findings
         </h2>
+        {onShare && (
+          <button type="button" className="top-wins-share-btn" onClick={onShare}>
+            Share results
+          </button>
+        )}
       </div>
 
       {scorecard.top_wins.map((win) => (
