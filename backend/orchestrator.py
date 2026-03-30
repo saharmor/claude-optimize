@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from datetime import datetime, timezone
 from pathlib import Path
 
+logger = logging.getLogger(__name__)
+
 from analyzers import ANALYZER_PROMPTS
 from claude_runner import run_analyzer, run_project_summary
+from detect_claude_usage import has_claude_usage
 from demo_findings import DEMO_FINDINGS as SAMPLE_PROJECT_FINDINGS
 from models import AnalyzerStatus, AnalyzerType, Finding
 from project_summary import DEMO_PROJECT_SUMMARY, build_project_summary_prompt
@@ -23,6 +27,7 @@ _SAMPLE_PROJECT_DELAYS: dict[AnalyzerType, float] = {
     AnalyzerType.BATCHING: 10.0,
     AnalyzerType.TOOL_USE: 13.0,
     AnalyzerType.STRUCTURED_OUTPUTS: 16.0,
+    AnalyzerType.MODEL_UPGRADE: 4.0,
 }
 
 _SAMPLE_PROJECT_FINDINGS_BY_TYPE: dict[AnalyzerType, list[Finding]] = {}
@@ -38,7 +43,32 @@ SCAN_SEMAPHORE = asyncio.Semaphore(MAX_CONCURRENT_SCANS)
 
 
 async def run_scan(scan_id: str, project_path: str) -> None:
-    """Run all 5 analyzers in parallel and aggregate results."""
+    """Run all analyzers in parallel and aggregate results."""
+
+    # --- Pre-check: does the project use the Claude API at all? ---
+    if not await asyncio.to_thread(has_claude_usage, project_path):
+        await asyncio.sleep(5)
+        scan = store.get(scan_id)
+        if scan:
+            scan.status = "completed"
+            scan.no_claude_usage = True
+            scan.completed_at = datetime.now(timezone.utc)
+            scan.project_summary_status = AnalyzerStatus.COMPLETED
+            for a in AnalyzerType:
+                scan.analyzer_statuses[a] = AnalyzerStatus.COMPLETED
+        store.notify(scan_id, {
+            "event": "scan_complete",
+            "data": {
+                "scan_id": scan_id,
+                "status": "completed",
+                "no_claude_usage": True,
+                "total_findings": 0,
+                "error": None,
+            },
+        })
+        _notify_stream_complete_if_ready(scan_id)
+        return
+
     summary_task = asyncio.create_task(_run_project_summary(scan_id, project_path))
 
     try:
@@ -189,8 +219,12 @@ async def _run_single_analyzer(
     store.update_analyzer_status(scan_id, analyzer_type, AnalyzerStatus.RUNNING)
 
     try:
-        findings = await run_analyzer(prompt, project_path)
+        findings, note = await run_analyzer(prompt, project_path)
         _store_analyzer_findings(scan_id, findings)
+        if note:
+            scan = store.get(scan_id)
+            if scan:
+                scan.analyzer_notes[analyzer_type] = note
         store.update_analyzer_status(scan_id, analyzer_type, AnalyzerStatus.COMPLETED)
         # Notify with finding count
         store.notify(scan_id, {
@@ -198,6 +232,7 @@ async def _run_single_analyzer(
             "data": {
                 "analyzer": analyzer_type.value,
                 "finding_count": len(findings),
+                "note": note,
             },
         })
         return findings

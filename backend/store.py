@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime, timezone
 
-from models import AnalyzerStatus, AnalyzerType, Finding, ProjectSummary, ScanResult
+from models import AnalyzerStatus, AnalyzerType, ApplyResult, Finding, ProjectSummary, ScanResult
 from settings import get_int_env
 
 SCAN_TTL_SECONDS = get_int_env(
@@ -160,5 +160,82 @@ class ScanStore:
             self._subscribers.pop(scan_id, None)
 
 
-# Singleton
+class ApplyStore:
+    """In-memory store for apply jobs. Maps apply_id -> ApplyResult."""
+
+    def __init__(self) -> None:
+        self._applies: dict[str, ApplyResult] = {}
+        self._subscribers: dict[str, list[asyncio.Queue]] = {}
+
+    def create(self, apply: ApplyResult) -> None:
+        self._cleanup_expired()
+        self._applies[apply.apply_id] = apply
+
+    def get(self, apply_id: str) -> ApplyResult | None:
+        return self._applies.get(apply_id)
+
+    def update(self, apply_id: str, **kwargs) -> ApplyResult | None:
+        apply = self._applies.get(apply_id)
+        if apply is None:
+            return None
+        for key, value in kwargs.items():
+            setattr(apply, key, value)
+        return apply
+
+    def subscribe(self, apply_id: str) -> asyncio.Queue:
+        queue: asyncio.Queue = asyncio.Queue()
+        self._subscribers.setdefault(apply_id, []).append(queue)
+        apply = self._applies.get(apply_id)
+        if apply and apply.status in {"completed", "failed"}:
+            queue.put_nowait({
+                "event": "stream_complete",
+                "data": {
+                    "apply_id": apply_id,
+                    "status": apply.status,
+                    "error": apply.error,
+                },
+            })
+        return queue
+
+    def unsubscribe(self, apply_id: str, queue: asyncio.Queue) -> None:
+        if apply_id in self._subscribers:
+            self._subscribers[apply_id] = [
+                q for q in self._subscribers[apply_id] if q is not queue
+            ]
+            if not self._subscribers[apply_id]:
+                del self._subscribers[apply_id]
+
+    def notify(self, apply_id: str, message: dict) -> None:
+        for queue in self._subscribers.get(apply_id, []):
+            queue.put_nowait(message)
+
+    def count_active(self) -> int:
+        return sum(
+            1 for apply in self._applies.values()
+            if apply.status not in {"completed", "failed"}
+        )
+
+    def _cleanup_expired(self) -> None:
+        if SCAN_TTL_SECONDS <= 0:
+            return
+
+        now = datetime.now(timezone.utc)
+        expired: list[str] = []
+
+        for apply_id, apply in self._applies.items():
+            if apply.status not in {"completed", "failed"}:
+                continue
+            completed_at = apply.completed_at or apply.started_at
+            if completed_at is None:
+                continue
+            if (now - completed_at).total_seconds() > SCAN_TTL_SECONDS:
+                expired.append(apply_id)
+
+        for apply_id in expired:
+            self._applies.pop(apply_id, None)
+            self._subscribers.pop(apply_id, None)
+
+
+# Singletons
 store = ScanStore()
+apply_store = ApplyStore()

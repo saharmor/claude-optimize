@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 import re
+from collections.abc import Callable
 from pathlib import Path
 
 from models import Finding, ProjectSummary
@@ -17,12 +18,107 @@ MODEL_NAME = get_env("CLAUDE_OPTIMIZE_MODEL", default="sonnet")
 SKIP_PERMISSIONS = get_bool_env("CLAUDE_OPTIMIZE_SKIP_PERMISSIONS", default=False)
 
 
-async def run_analyzer(prompt: str, project_path: str) -> list[Finding]:
-    """Run a Claude Code headless session and parse structured findings."""
+async def run_apply(
+    prompt: str,
+    project_path: str,
+    on_output: Callable[[str], None] | None = None,
+) -> str:
+    """Run Claude Code to apply changes to a project, streaming stdout line-by-line."""
+    command = [
+        "claude",
+        "--print",
+        "--model",
+        MODEL_NAME,
+        "--max-turns",
+        str(MAX_TURNS),
+    ]
+    if SKIP_PERMISSIONS:
+        command.append("--dangerously-skip-permissions")
+    command.extend(["-p", prompt])
+
+    proc = await asyncio.create_subprocess_exec(
+        *command,
+        cwd=project_path,
+        stdin=asyncio.subprocess.DEVNULL,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+
+    output_lines: list[str] = []
+
+    async def _stream_stdout():
+        assert proc.stdout is not None
+        async for raw_line in proc.stdout:
+            line = raw_line.decode().rstrip("\n")
+            output_lines.append(line)
+            if on_output:
+                on_output(line)
+
+    stderr_lines: list[bytes] = []
+
+    async def _stream_stderr():
+        assert proc.stderr is not None
+        async for raw_line in proc.stderr:
+            stderr_lines.append(raw_line)
+
+    try:
+        await asyncio.wait_for(
+            asyncio.gather(_stream_stdout(), _stream_stderr()),
+            timeout=600,
+        )
+    except asyncio.TimeoutError:
+        proc.kill()
+        await proc.communicate()
+        raise RuntimeError("Apply timed out after 600s")
+    except Exception:
+        proc.kill()
+        await proc.communicate()
+        raise
+
+    await proc.wait()
+
+    if proc.returncode != 0:
+        err = b"".join(stderr_lines).decode() if stderr_lines else "Unknown error"
+        raise RuntimeError(f"Claude Code exited with code {proc.returncode}: {err}")
+
+    return "\n".join(output_lines)
+
+
+_NO_CLAUDE_PATTERNS = [
+    "does not use the anthropic",
+    "does not use the claude",
+    "doesn't use the anthropic",
+    "doesn't use the claude",
+    "no anthropic",
+    "no claude api",
+    "no imports of the `anthropic`",
+    "no `anthropic` imports",
+    "not claude",
+    "not using claude",
+    "not using the anthropic",
+]
+
+
+def _detect_no_claude_usage(text: str) -> str | None:
+    """Return a user-facing note if the analyzer says there's no Claude API usage."""
+    lower = text.lower()
+    for pattern in _NO_CLAUDE_PATTERNS:
+        if pattern in lower:
+            return "no_claude_usage"
+    return None
+
+
+async def run_analyzer(prompt: str, project_path: str) -> tuple[list[Finding], str | None]:
+    """Run a Claude Code headless session and parse structured findings.
+
+    Returns (findings, note) where note is a string tag when the analyzer
+    detected something noteworthy (e.g. "no_claude_usage"), or None.
+    """
     result_text = await _run_claude_prompt(prompt, project_path)
     findings = _parse_findings(result_text)
-    logger.info("Parsed %d findings from analyzer response (%d chars)", len(findings), len(result_text))
-    return findings
+    note = _detect_no_claude_usage(result_text) if not findings else None
+    logger.info("Parsed %d findings from analyzer response (%d chars), note=%s", len(findings), len(result_text), note)
+    return findings, note
 
 
 async def run_project_summary(prompt: str, project_path: str) -> ProjectSummary:

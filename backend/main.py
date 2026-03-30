@@ -11,11 +11,12 @@ from fastapi import BackgroundTasks, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sse_starlette.sse import EventSourceResponse
 
-from models import AnalyzerStatus, AnalyzerType, RecentProjectsResponse, ScanRequest, ScanResult
+from apply_runner import run_apply_job
+from models import AnalyzerStatus, AnalyzerType, ApplyRequest, ApplyResult, RecentProjectsResponse, ScanRequest, ScanResult
 from orchestrator import is_sample_project, run_sample_project_scan, run_scan
 from recent_projects import list_recent_projects
 from settings import get_env
-from store import store
+from store import apply_store, store
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -197,5 +198,68 @@ async def scan_stream(scan_id: str):
                     yield {"event": "keepalive", "data": ""}
         finally:
             store.unsubscribe(scan_id, queue)
+
+    return EventSourceResponse(event_generator())
+
+
+# --- Apply endpoints ---
+
+MAX_CONCURRENT_APPLIES = 1
+
+
+@app.post("/api/apply", status_code=202)
+async def start_apply(request: ApplyRequest, background_tasks: BackgroundTasks):
+    if apply_store.count_active() >= MAX_CONCURRENT_APPLIES:
+        raise HTTPException(
+            status_code=429,
+            detail="An apply job is already running. Please wait for it to finish.",
+        )
+
+    project_path = _validate_project_path(request.project_path)
+
+    apply_id = str(uuid.uuid4())
+    apply = ApplyResult(
+        apply_id=apply_id,
+        project_path=project_path,
+        status="pending",
+    )
+    apply_store.create(apply)
+
+    background_tasks.add_task(run_apply_job, apply_id, request.prompt, project_path)
+
+    return {"apply_id": apply_id, "status": "pending"}
+
+
+@app.get("/api/apply/{apply_id}")
+async def get_apply(apply_id: str):
+    apply = apply_store.get(apply_id)
+    if apply is None:
+        raise HTTPException(status_code=404, detail="Apply job not found")
+    return apply
+
+
+@app.get("/api/apply/{apply_id}/stream")
+async def apply_stream(apply_id: str):
+    apply = apply_store.get(apply_id)
+    if apply is None:
+        raise HTTPException(status_code=404, detail="Apply job not found")
+
+    queue = apply_store.subscribe(apply_id)
+
+    async def event_generator():
+        try:
+            while True:
+                try:
+                    message = await asyncio.wait_for(queue.get(), timeout=30.0)
+                    yield {
+                        "event": message["event"],
+                        "data": json.dumps(message["data"]),
+                    }
+                    if message["event"] == "stream_complete":
+                        break
+                except asyncio.TimeoutError:
+                    yield {"event": "keepalive", "data": ""}
+        finally:
+            apply_store.unsubscribe(apply_id, queue)
 
     return EventSourceResponse(event_generator())
