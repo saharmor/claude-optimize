@@ -7,7 +7,7 @@ export type AnalyzerType =
 
 export type AnalyzerStatus = "pending" | "running" | "completed" | "failed";
 export type Severity = "high" | "medium" | "low";
-export type ProjectSource = "bundled_demo" | "cursor" | "vscode" | "claude_code";
+export type ProjectSource = "sample_project" | "cursor" | "vscode" | "claude_code";
 
 export const ALL_ANALYZERS: AnalyzerType[] = [
   "prompt_engineering",
@@ -44,6 +44,7 @@ export interface Impact {
 
 export interface Finding {
   category: AnalyzerType;
+  model: string;
   location: CodeLocation;
   current_state: CodeSnippet;
   recommendation: Recommendation;
@@ -67,6 +68,11 @@ export interface Scorecard {
   top_wins: TopWin[];
 }
 
+export interface ProjectSummary {
+  one_liner: string;
+  description: string;
+}
+
 export interface ScanResult {
   scan_id: string;
   project_path: string;
@@ -75,6 +81,9 @@ export interface ScanResult {
   analyzer_errors: Partial<Record<AnalyzerType, string>>;
   findings: Finding[];
   scorecard: Scorecard | null;
+  project_summary: ProjectSummary | null;
+  project_summary_status: AnalyzerStatus;
+  project_summary_error: string | null;
   started_at: string | null;
   completed_at: string | null;
   error: string | null;
@@ -95,10 +104,3 @@ export const ANALYZER_LABELS: Record<AnalyzerType, string> = {
   structured_outputs: "Structured Outputs",
 };
 
-export const ANALYZER_ICONS: Record<AnalyzerType, string> = {
-  prompt_engineering: "PE",
-  prompt_caching: "PC",
-  batching: "BA",
-  tool_use: "TU",
-  structured_outputs: "SO",
-};

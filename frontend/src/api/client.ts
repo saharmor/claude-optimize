@@ -63,7 +63,10 @@ export async function startScan(
       detail?: unknown;
     };
     throw new Error(
-      formatApiErrorDetail(err.detail, res.statusText || "Failed to start scan")
+      formatApiErrorDetail(
+        err.detail,
+        res.statusText || "Failed to start optimization audit"
+      )
     );
   }
 
@@ -72,7 +75,7 @@ export async function startScan(
 
 export async function getScanResult(scanId: string): Promise<ScanResult> {
   const res = await fetch(`/api/scan/${scanId}`);
-  if (!res.ok) throw new Error("Failed to fetch scan result");
+  if (!res.ok) throw new Error("Failed to fetch optimization audit result");
   return res.json();
 }
 
@@ -114,9 +117,25 @@ export function subscribeScanStream(
     onEvent("analyzer_failed", parseEventData(e.data));
   });
 
+  es.addEventListener("project_summary_status", (e) => {
+    onEvent("project_summary_status", parseEventData(e.data));
+  });
+
+  es.addEventListener("project_summary_complete", (e) => {
+    onEvent("project_summary_complete", parseEventData(e.data));
+  });
+
+  es.addEventListener("project_summary_failed", (e) => {
+    onEvent("project_summary_failed", parseEventData(e.data));
+  });
+
   es.addEventListener("scan_complete", (e) => {
-    finished = true;
     onEvent("scan_complete", parseEventData(e.data));
+  });
+
+  es.addEventListener("stream_complete", (e) => {
+    finished = true;
+    onEvent("stream_complete", parseEventData(e.data));
     onDone();
     es.close();
   });
@@ -129,13 +148,19 @@ export function subscribeScanStream(
     void (async () => {
       try {
         const latest = await getScanResult(scanId);
-        if (latest.status === "completed" || latest.status === "failed") {
+        const summaryDone =
+          latest.project_summary_status === "completed" ||
+          latest.project_summary_status === "failed";
+
+        if ((latest.status === "completed" || latest.status === "failed") && summaryDone) {
           onDone();
           return;
         }
-        onError("Live progress disconnected. The scan may still be running.");
+        onError("Live progress disconnected. The optimization audit may still be running.");
       } catch {
-        onError("Lost connection to the scan service. Check the backend and refresh.");
+        onError(
+          "Lost connection while tracking the optimization audit. Check the backend and refresh."
+        );
       }
     })();
   };
