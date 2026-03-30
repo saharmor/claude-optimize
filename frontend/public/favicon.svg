@@ -1,8 +1,8 @@
 <svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
 <rect width="48" height="48" rx="12" fill="#F5F3EC"/>
 <rect x="0.5" y="0.5" width="47" height="47" rx="11.5" stroke="#DEDAD0"/>
-<path d="M12 24L18 13L24 24L18 35L12 24Z" stroke="#C46A42" stroke-width="2.75" stroke-linejoin="round"/>
-<path d="M24 13L35 24L24 35" stroke="#C46A42" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round"/>
-<path d="M24 13L13 24L24 35" stroke="#C46A42" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round"/>
-<path d="M18 24H30" stroke="#C46A42" stroke-width="2.75" stroke-linecap="round"/>
+<!-- Main sparkle -->
+<path d="M24 8C25.2 17 31 22.8 40 24C31 25.2 25.2 31 24 40C22.8 31 17 25.2 8 24C17 22.8 22.8 17 24 8Z" fill="#D97757"/>
+<!-- Small sparkle -->
+<path d="M37 6C37.5 10 40 12.5 44 13C40 13.5 37.5 16 37 20C36.5 16 34 13.5 30 13C34 12.5 36.5 10 37 6Z" fill="#D97757" opacity="0.65"/>
 </svg>
