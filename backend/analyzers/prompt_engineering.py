@@ -31,6 +31,11 @@ SCOPING RULES:
 - If the code is asking for structured JSON and manually parsing it, do NOT recommend assistant prefill as the primary fix unless the code clearly must stay text-only. Leave API-level structure enforcement to the structured outputs analyzer.
 - Focus on prompt content and structure, not tool scoping or caching mechanics.
 
+MODEL-SPECIFIC PROMPT ENGINEERING CONSIDERATIONS:
+- Different models benefit differently from prompt engineering techniques. More capable models (Opus) may need fewer examples and less rigid structure, while smaller models (Haiku) benefit more from explicit XML tags, detailed examples, and strict output contracts.
+- When estimating impact, consider that prompt engineering improvements reduce retries and wasted tokens — the dollar value of those wasted tokens depends on the model's pricing.
+- Identify the model from each API call and use its specific pricing in your estimates.
+
 DOCS REFERENCES:
 - Prompt engineering overview: https://docs.anthropic.com/en/docs/build-with-claude/prompt-engineering/overview
 - Use XML tags: https://docs.anthropic.com/en/docs/build-with-claude/prompt-engineering/use-xml-tags

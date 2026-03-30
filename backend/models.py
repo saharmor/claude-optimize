@@ -23,7 +23,7 @@ class AnalyzerStatus(str, Enum):
 
 
 class ProjectSource(str, Enum):
-    BUNDLED_DEMO = "bundled_demo"
+    SAMPLE_PROJECT = "sample_project"
     CURSOR = "cursor"
     VSCODE = "vscode"
     CLAUDE_CODE = "claude_code"
@@ -58,6 +58,7 @@ class Impact(BaseModel):
 
 class Finding(BaseModel):
     category: AnalyzerType
+    model: str = ""  # Claude model used at this API call site (e.g. "claude-sonnet-4-6")
     location: CodeLocation
     current_state: CodeSnippet
     recommendation: Recommendation
@@ -89,6 +90,11 @@ class ScanRequest(BaseModel):
     project_path: str
 
 
+class ProjectSummary(BaseModel):
+    one_liner: str
+    description: str
+
+
 class ScanResult(BaseModel):
     scan_id: str
     project_path: str
@@ -97,6 +103,9 @@ class ScanResult(BaseModel):
     analyzer_errors: dict[AnalyzerType, str] = Field(default_factory=dict)
     findings: list[Finding] = Field(default_factory=list)
     scorecard: Scorecard | None = None
+    project_summary: ProjectSummary | None = None
+    project_summary_status: AnalyzerStatus = AnalyzerStatus.PENDING
+    project_summary_error: str | None = None
     started_at: datetime | None = None
     completed_at: datetime | None = None
     error: str | None = None

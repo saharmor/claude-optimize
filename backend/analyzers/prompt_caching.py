@@ -26,6 +26,11 @@ HOW PROMPT CACHING WORKS:
 - Cache is based on exact prefix matching, so the cached content must be an exact prefix of the new request
 - Cacheability thresholds are model-dependent, so only recommend caching when the repeated prefix is clearly large enough to qualify
 
+MODEL-SPECIFIC CACHING CONSIDERATIONS:
+- The dollar savings from caching scale with the model's input token price. Caching is far more impactful for Opus ($15/MTok input → $1.50/MTok cached read) than for Haiku ($0.80/MTok input → $0.08/MTok cached read).
+- Always calculate savings using the specific model's pricing from the pricing table. For example, caching 2,000 tokens on 10 calls saves ~18,000 input tokens — at Opus pricing that's ~$0.27, at Sonnet pricing ~$0.054, at Haiku pricing ~$0.014.
+- Identify the model from the `model` parameter in each API call and use it in your estimates.
+
 WHEN TO RECOMMEND CACHING:
 - System prompts or static prefixes that are clearly large and reused frequently
 - Content that is repeated across > 3 calls within a short window

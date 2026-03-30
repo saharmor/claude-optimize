@@ -28,6 +28,13 @@ HOW STRUCTURED OUTPUTS WORK:
 - No more parsing failures, no retries needed, and much less prompt text spent on format instructions
 - The response shape should be guaranteed by the API or enforced by the tool schema itself
 
+MODEL-SPECIFIC STRUCTURED OUTPUT CONSIDERATIONS:
+- All Claude models support structured outputs, but the retry cost of NOT using them varies by model. Each failed retry wastes both input and output tokens at that model's rate:
+  - Opus: a retry wastes ~2,000 input tokens ($0.03) + ~200 output tokens ($0.015) = ~$0.045/retry
+  - Sonnet: ~$0.006 + ~$0.003 = ~$0.009/retry
+  - Haiku: ~$0.0016 + ~$0.0008 = ~$0.0024/retry
+- Identify the model from each API call and use its specific pricing in your estimates.
+
 WHEN TO RECOMMEND STRUCTURED OUTPUTS:
 - Any time the code parses Claude's response to extract fields
 - Any time the prompt asks Claude to respond in a specific format
