@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime, timezone
 
-from models import AnalyzerStatus, AnalyzerType, ScanResult
+from models import AnalyzerStatus, AnalyzerType, Finding, ProjectSummary, ScanResult
 from settings import get_int_env
 
 SCAN_TTL_SECONDS = get_int_env(
@@ -37,6 +37,13 @@ class ScanStore:
             setattr(scan, key, value)
         return scan
 
+    def add_findings(self, scan_id: str, findings: list[Finding]) -> ScanResult | None:
+        scan = self._scans.get(scan_id)
+        if scan is None:
+            return None
+        scan.findings.extend(findings)
+        return scan
+
     def update_analyzer_status(
         self, scan_id: str, analyzer: AnalyzerType, status: AnalyzerStatus
     ) -> None:
@@ -59,15 +66,48 @@ class ScanStore:
                 "data": {"analyzer": analyzer.value, "error": error},
             })
 
+    def update_project_summary_status(self, scan_id: str, status: AnalyzerStatus) -> None:
+        scan = self._scans.get(scan_id)
+        if scan:
+            scan.project_summary_status = status
+            self.notify(scan_id, {
+                "event": "project_summary_status",
+                "data": {"status": status.value},
+            })
+
+    def set_project_summary(self, scan_id: str, summary: ProjectSummary) -> ScanResult | None:
+        scan = self._scans.get(scan_id)
+        if scan is None:
+            return None
+        scan.project_summary = summary
+        scan.project_summary_error = None
+        return scan
+
+    def set_project_summary_error(self, scan_id: str, error: str) -> ScanResult | None:
+        scan = self._scans.get(scan_id)
+        if scan is None:
+            return None
+        scan.project_summary_error = error
+        return scan
+
+    def is_stream_complete(self, scan_id: str) -> bool:
+        scan = self._scans.get(scan_id)
+        if scan is None:
+            return True
+        return (
+            scan.status in {"completed", "failed"}
+            and scan.project_summary_status in {AnalyzerStatus.COMPLETED, AnalyzerStatus.FAILED}
+        )
+
     def subscribe(self, scan_id: str) -> asyncio.Queue:
         self._cleanup_expired()
         queue: asyncio.Queue = asyncio.Queue()
         self._subscribers.setdefault(scan_id, []).append(queue)
         scan = self._scans.get(scan_id)
-        if scan and scan.status in {"completed", "failed"}:
+        if scan and self.is_stream_complete(scan_id):
             queue.put_nowait(
                 {
-                    "event": "scan_complete",
+                    "event": "stream_complete",
                     "data": {
                         "scan_id": scan_id,
                         "total_findings": len(scan.findings),
@@ -89,6 +129,12 @@ class ScanStore:
     def notify(self, scan_id: str, message: dict) -> None:
         for queue in self._subscribers.get(scan_id, []):
             queue.put_nowait(message)
+
+    def count_active(self) -> int:
+        return sum(
+            1 for scan in self._scans.values()
+            if scan.status not in {"completed", "failed"}
+        )
 
     def _cleanup_expired(self) -> None:
         if SCAN_TTL_SECONDS <= 0:

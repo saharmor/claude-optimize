@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import subprocess
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -17,11 +18,11 @@ CURSOR_STORAGE_PATH = Path.home() / "Library/Application Support/Cursor/User/glo
 VSCODE_STORAGE_PATH = Path.home() / "Library/Application Support/Code/User/globalStorage/storage.json"
 VSCODE_STATE_DB_PATH = Path.home() / "Library/Application Support/Code/User/globalStorage/state.vscdb"
 CLAUDE_SESSIONS_DIR = Path.home() / ".claude" / "sessions"
-BUNDLED_PROJECTS = (
-    ("⭐️ Bundled demo: Support ticket classifier", PROJECT_ROOT / "sample_project"),
+SAMPLE_PROJECTS = (
+    ("⭐️ Sample project: Support ticket classifier", PROJECT_ROOT / "sample_project"),
 )
 SOURCE_ORDER = {
-    ProjectSource.BUNDLED_DEMO: 0,
+    ProjectSource.SAMPLE_PROJECT: 0,
     ProjectSource.CURSOR: 1,
     ProjectSource.VSCODE: 2,
     ProjectSource.CLAUDE_CODE: 3,
@@ -60,12 +61,17 @@ def _collect_recent_projects(limit: int) -> list[RecentProject]:
     _merge_editor_projects(collected, ProjectSource.CURSOR, CURSOR_STORAGE_PATH)
     _merge_editor_projects(collected, ProjectSource.VSCODE, VSCODE_STORAGE_PATH, VSCODE_STATE_DB_PATH)
     _merge_claude_projects(collected)
-    bundled_paths = _merge_bundled_projects(collected)
+    sample_project_paths = _merge_sample_projects(collected)
+
+    # Enrich projects that lack a timestamp with actual directory activity
+    for item in collected.values():
+        if item.last_used_at is None:
+            item.last_used_at = _get_directory_last_activity(item.path)
 
     ordered = sorted(collected.values(), key=_sort_key)
-    bundled_path_set = set(bundled_paths)
-    prioritized = [collected[path] for path in bundled_paths if path in collected]
-    prioritized.extend(item for item in ordered if item.path not in bundled_path_set)
+    sample_project_path_set = set(sample_project_paths)
+    prioritized = [collected[path] for path in sample_project_paths if path in collected]
+    prioritized.extend(item for item in ordered if item.path not in sample_project_path_set)
     projects: list[RecentProject] = []
     for item in prioritized[:limit]:
         projects.append(
@@ -123,9 +129,9 @@ def _merge_claude_projects(collected: dict[Path, _CollectedProject]) -> None:
             item.last_used_at = started_at
 
 
-def _merge_bundled_projects(collected: dict[Path, _CollectedProject]) -> list[Path]:
-    bundled_paths: list[Path] = []
-    for name, path in BUNDLED_PROJECTS:
+def _merge_sample_projects(collected: dict[Path, _CollectedProject]) -> list[Path]:
+    sample_project_paths: list[Path] = []
+    for name, path in SAMPLE_PROJECTS:
         try:
             resolved_path = path.resolve()
         except OSError:
@@ -136,10 +142,10 @@ def _merge_bundled_projects(collected: dict[Path, _CollectedProject]) -> list[Pa
 
         item = collected.setdefault(resolved_path, _CollectedProject(path=resolved_path))
         item.name = name
-        item.sources.add(ProjectSource.BUNDLED_DEMO)
-        bundled_paths.append(resolved_path)
+        item.sources.add(ProjectSource.SAMPLE_PROJECT)
+        sample_project_paths.append(resolved_path)
 
-    return bundled_paths
+    return sample_project_paths
 
 
 def _load_editor_recent_paths(storage_path: Path, state_db_path: Path | None = None) -> list[Path]:
@@ -262,6 +268,30 @@ def _path_from_uri_payload(payload: Any) -> str | None:
     return None
 
 
+def _get_directory_last_activity(path: Path) -> datetime | None:
+    """Get the last activity time for a directory, preferring git commit time."""
+    try:
+        result = subprocess.run(
+            ["git", "log", "-1", "--format=%ct"],
+            cwd=path,
+            capture_output=True,
+            text=True,
+            timeout=2,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            unix_ts = int(result.stdout.strip())
+            return datetime.fromtimestamp(unix_ts, tz=timezone.utc)
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        pass
+
+    # Fall back to directory modification time
+    try:
+        mtime = path.stat().st_mtime
+        return datetime.fromtimestamp(mtime, tz=timezone.utc)
+    except OSError:
+        return None
+
+
 def _normalize_directory(raw_path: Any) -> Path | None:
     if not isinstance(raw_path, str) or not raw_path.strip():
         return None
@@ -296,10 +326,8 @@ def _timestamp_ms_to_datetime(value: Any) -> datetime | None:
         return None
 
 
-def _sort_key(item: _CollectedProject) -> tuple[int, int, float]:
-    if item.recent_rank is not None:
-        timestamp = item.last_used_at.timestamp() if item.last_used_at else 0.0
-        return (0, item.recent_rank, -timestamp)
-
+def _sort_key(item: _CollectedProject) -> tuple[float, int]:
+    """Sort by recency first, then by editor rank as tiebreaker."""
     timestamp = item.last_used_at.timestamp() if item.last_used_at else 0.0
-    return (1, 0, -timestamp)
+    rank = item.recent_rank if item.recent_rank is not None else 9999
+    return (-timestamp, rank)

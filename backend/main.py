@@ -12,12 +12,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from sse_starlette.sse import EventSourceResponse
 
 from models import AnalyzerStatus, AnalyzerType, RecentProjectsResponse, ScanRequest, ScanResult
-from orchestrator import is_bundled_demo, run_demo_scan, run_scan
+from orchestrator import is_sample_project, run_sample_project_scan, run_scan
 from recent_projects import list_recent_projects
 from settings import get_env
 from store import store
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
+logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 SENSITIVE_PATH_PARTS = {
@@ -28,20 +29,16 @@ SENSITIVE_PATH_PARTS = {
     ".kube",
     ".ssh",
 }
-SENSITIVE_PATH_PREFIXES = tuple(
-    path
-    for path in (
-        Path("/etc"),
-        Path("/System"),
-        Path("/Library"),
-        Path("/private"),
-        Path.home() / ".aws",
-        Path.home() / ".cursor",
-        Path.home() / ".gnupg",
-        Path.home() / ".kube",
-        Path.home() / ".ssh",
-    )
-    if path.exists()
+SENSITIVE_PATH_PREFIXES = (
+    Path("/etc"),
+    Path("/System"),
+    Path("/Library"),
+    Path("/private"),
+    Path.home() / ".aws",
+    Path.home() / ".cursor",
+    Path.home() / ".gnupg",
+    Path.home() / ".kube",
+    Path.home() / ".ssh",
 )
 
 
@@ -50,6 +47,10 @@ def _get_cors_origins() -> list[str]:
     if not configured:
         return ["http://localhost:5173", "http://127.0.0.1:5173"]
     if configured.strip() == "*":
+        logger.warning(
+            "CLAUDE_OPTIMIZE_CORS_ORIGINS is set to '*'. "
+            "Any website can trigger scans on this machine."
+        )
         return ["*"]
     return [origin.strip() for origin in configured.split(",") if origin.strip()]
 
@@ -133,8 +134,17 @@ async def get_recent_projects():
     return RecentProjectsResponse(projects=list_recent_projects(limit=12))
 
 
+MAX_QUEUED_SCANS = 10
+
+
 @app.post("/api/scan", status_code=202)
 async def start_scan(request: ScanRequest, background_tasks: BackgroundTasks):
+    if store.count_active() >= MAX_QUEUED_SCANS:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many scans in progress. Please wait for existing scans to finish.",
+        )
+
     project_path = _validate_project_path(request.project_path)
 
     scan_id = str(uuid.uuid4())
@@ -147,8 +157,8 @@ async def start_scan(request: ScanRequest, background_tasks: BackgroundTasks):
     )
     store.create(scan)
 
-    if is_bundled_demo(project_path):
-        background_tasks.add_task(run_demo_scan, scan_id, project_path)
+    if is_sample_project(project_path):
+        background_tasks.add_task(run_sample_project_scan, scan_id, project_path)
     else:
         background_tasks.add_task(run_scan, scan_id, project_path)
 
@@ -180,7 +190,7 @@ async def scan_stream(scan_id: str):
                         "event": message["event"],
                         "data": json.dumps(message["data"]),
                     }
-                    if message["event"] == "scan_complete":
+                    if message["event"] == "stream_complete":
                         break
                 except asyncio.TimeoutError:
                     # Send keepalive

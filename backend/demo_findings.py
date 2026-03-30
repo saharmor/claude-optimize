@@ -1,6 +1,6 @@
-"""Pre-generated findings for the bundled sample project demo.
+"""Pre-generated findings for the sample project.
 
-When a scan is run against the bundled demo project, these findings are returned
+When a scan is run against the sample project, these findings are returned
 instead of invoking the real Claude Code analyzers. This lets users preview a full
 report instantly (< 20 seconds) without consuming API quota.
 """
@@ -23,6 +23,7 @@ DEMO_FINDINGS: list[Finding] = [
     # -------------------------------------------------------------------------
     Finding(
         category=AnalyzerType.PROMPT_ENGINEERING,
+        model="claude-sonnet-4-6",
         location=CodeLocation(file=_FILE, lines="30-50"),
         current_state=CodeSnippet(
             description=(
@@ -100,6 +101,7 @@ Response: {"category":"shipping","priority":"medium","suggested_response":"Hi! I
     # -------------------------------------------------------------------------
     Finding(
         category=AnalyzerType.PROMPT_CACHING,
+        model="claude-sonnet-4-6",
         location=CodeLocation(file=_FILE, lines="196-204", function="classify_ticket"),
         current_state=CodeSnippet(
             description=(
@@ -152,7 +154,7 @@ response = client.messages.create(
             reliability_improvement="low",
             estimated_savings_detail=(
                 "~90% cost reduction on the 2,000-token prompt after the first call. "
-                "On a batch of 10 tickets, saves ~18,000 input tokens (~$0.054 at Sonnet pricing)."
+                "On a batch of 10 tickets, saves ~18,000 input tokens (~$0.054 at claude-sonnet-4-6 pricing of $3/MTok input)."
             ),
         ),
         confidence="high",
@@ -163,6 +165,7 @@ response = client.messages.create(
     # -------------------------------------------------------------------------
     Finding(
         category=AnalyzerType.BATCHING,
+        model="claude-sonnet-4-6",
         location=CodeLocation(
             file=_FILE, lines="248-254", function="process_ticket_backlog"
         ),
@@ -242,7 +245,7 @@ def process_ticket_backlog(tickets: list[dict]) -> list[dict]:
             reliability_improvement="medium",
             estimated_savings_detail=(
                 "50% token cost reduction on the entire batch. At 1,000 tickets/day "
-                "with 2,000 input tokens each, saves ~$3/day at Sonnet pricing."
+                "with 2,000 input tokens each, saves ~$3/day at claude-sonnet-4-6 pricing of $3/MTok input."
             ),
         ),
         confidence="high",
@@ -253,6 +256,7 @@ def process_ticket_backlog(tickets: list[dict]) -> list[dict]:
     # -------------------------------------------------------------------------
     Finding(
         category=AnalyzerType.TOOL_USE,
+        model="claude-sonnet-4-6",
         location=CodeLocation(file=_FILE, lines="200", function="classify_ticket"),
         current_state=CodeSnippet(
             description=(
@@ -312,7 +316,7 @@ response = client.messages.create(
             reliability_improvement="medium",
             estimated_savings_detail=(
                 "Removes ~1,500 tokens of tool definitions per classification call. "
-                "On 10 tickets that's ~15,000 tokens saved (~$0.045 at Sonnet input pricing)."
+                "On 10 tickets that's ~15,000 tokens saved (~$0.045 at claude-sonnet-4-6 pricing of $3/MTok input)."
             ),
         ),
         confidence="high",
@@ -323,6 +327,7 @@ response = client.messages.create(
     # -------------------------------------------------------------------------
     Finding(
         category=AnalyzerType.STRUCTURED_OUTPUTS,
+        model="claude-sonnet-4-6",
         location=CodeLocation(
             file=_FILE, lines="193-235", function="classify_ticket"
         ),
