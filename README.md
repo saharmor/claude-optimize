@@ -8,12 +8,6 @@
 Scan your Claude-powered app and get a prioritized optimization report
 to improve performance and reduce latency + cost
 
-<p>
-<a href="https://www.linkedin.com/in/sahar-mor/" target="_blank"><img src="https://img.shields.io/badge/LinkedIn-Connect-blue" alt="LinkedIn"></a>
-<a href="https://x.com/theaievangelist" target="_blank"><img src="https://img.shields.io/twitter/follow/theaievangelist" alt="X"></a>
-<a href="http://aitidbits.ai/" target="_blank"><img src="https://img.shields.io/badge/AI%20Tidbits-Stay%20updated%20on%20AI-yellow" alt="Stay updated on AI"></a>
-</p>
-
 <br/>
 
 <img width="761" src="frontend/src/assets/hero.png" alt="Claude Optimize preview" style="border-radius: 12px;" />
