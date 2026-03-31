@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import confetti from "canvas-confetti";
 import { subscribeApplyStream } from "../api/client";
 import type { Finding } from "../types/scan";
 import { ANALYZER_LABELS } from "../types/scan";
@@ -13,6 +14,42 @@ interface Props {
   onApplySuccess?: () => void;
 }
 
+/** Fire a confetti celebration. Returns a cleanup function that stops the sustained shower early. */
+function fireConfetti(): () => void {
+  const duration = 3000;
+  const end = Date.now() + duration;
+
+  const colors = ["#2d6a4f", "#40916c", "#52b788", "#74c69d", "#b7e4c7", "#ffd166", "#ef476f"];
+
+  // Big initial bursts from both sides
+  confetti({ particleCount: 150, spread: 80, startVelocity: 55, origin: { x: 0, y: 0.6 }, angle: 60, colors });
+  confetti({ particleCount: 150, spread: 80, startVelocity: 55, origin: { x: 1, y: 0.6 }, angle: 120, colors });
+
+  // Center burst
+  confetti({ particleCount: 100, spread: 100, startVelocity: 45, origin: { x: 0.5, y: 0.4 }, colors });
+
+  // Sustained shower
+  const interval = setInterval(() => {
+    if (Date.now() > end) {
+      clearInterval(interval);
+      return;
+    }
+
+    confetti({
+      particleCount: 40,
+      spread: 70,
+      startVelocity: 35,
+      origin: { x: Math.random(), y: -0.1 },
+      colors,
+      ticks: 200,
+      gravity: 1.2,
+      scalar: 1.2,
+    });
+  }, 200);
+
+  return () => clearInterval(interval);
+}
+
 export default function ApplyProgress({ applyId, projectPath, findings, onBack, onRetry, onShare, onApplySuccess }: Props) {
   const [outputLines, setOutputLines] = useState<string[]>([]);
   const [status, setStatus] = useState<"running" | "completed" | "failed">("running");
@@ -20,6 +57,12 @@ export default function ApplyProgress({ applyId, projectPath, findings, onBack, 
   const [logFadingOut, setLogFadingOut] = useState(false);
   const [logHidden, setLogHidden] = useState(false);
   const logRef = useRef<HTMLDivElement>(null);
+  const fadeTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const confettiFired = useRef(false);
+
+  useEffect(() => {
+    return () => { if (fadeTimerRef.current) clearTimeout(fadeTimerRef.current); };
+  }, []);
 
   useEffect(() => {
     const unsubscribe = subscribeApplyStream(
@@ -40,6 +83,34 @@ export default function ApplyProgress({ applyId, projectPath, findings, onBack, 
     return unsubscribe;
   }, [applyId]);
 
+  // Fire confetti when success card becomes visible, waiting for focus if needed
+  const confettiCleanup = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    return () => { confettiCleanup.current?.(); };
+  }, []);
+
+  useEffect(() => {
+    if (status !== "completed" || !logHidden || confettiFired.current) return;
+
+    const trigger = () => {
+      if (confettiFired.current) return;
+      confettiFired.current = true;
+      confettiCleanup.current = fireConfetti();
+    };
+
+    if (document.hasFocus()) {
+      trigger();
+    } else {
+      const onFocus = () => {
+        trigger();
+        window.removeEventListener("focus", onFocus);
+      };
+      window.addEventListener("focus", onFocus);
+      return () => window.removeEventListener("focus", onFocus);
+    }
+  }, [status, logHidden]);
+
   // Fade out the log when status changes from running
   useEffect(() => {
     if (status === "running" || logHidden) return;
@@ -50,11 +121,10 @@ export default function ApplyProgress({ applyId, projectPath, findings, onBack, 
     }
     if (!logFadingOut) {
       setLogFadingOut(true);
-      const timer = setTimeout(() => {
+      fadeTimerRef.current = setTimeout(() => {
         setLogHidden(true);
         setLogFadingOut(false);
       }, 400);
-      return () => clearTimeout(timer);
     }
   }, [status, outputLines.length, logFadingOut, logHidden]);
 
