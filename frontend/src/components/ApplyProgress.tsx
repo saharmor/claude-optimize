@@ -10,12 +10,15 @@ interface Props {
   onBack: () => void;
   onRetry: () => void;
   onShare: () => void;
+  onApplySuccess?: () => void;
 }
 
-export default function ApplyProgress({ applyId, projectPath, findings, onBack, onRetry, onShare }: Props) {
+export default function ApplyProgress({ applyId, projectPath, findings, onBack, onRetry, onShare, onApplySuccess }: Props) {
   const [outputLines, setOutputLines] = useState<string[]>([]);
   const [status, setStatus] = useState<"running" | "completed" | "failed">("running");
   const [error, setError] = useState<string | null>(null);
+  const [logFadingOut, setLogFadingOut] = useState(false);
+  const [logHidden, setLogHidden] = useState(false);
   const logRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -26,6 +29,7 @@ export default function ApplyProgress({ applyId, projectPath, findings, onBack, 
       },
       () => {
         setStatus("completed");
+        onApplySuccess?.();
       },
       (err) => {
         setStatus("failed");
@@ -36,6 +40,24 @@ export default function ApplyProgress({ applyId, projectPath, findings, onBack, 
     return unsubscribe;
   }, [applyId]);
 
+  // Fade out the log when status changes from running
+  useEffect(() => {
+    if (status === "running" || logHidden) return;
+    // Nothing to fade — skip straight to hidden
+    if (outputLines.length === 0) {
+      setLogHidden(true);
+      return;
+    }
+    if (!logFadingOut) {
+      setLogFadingOut(true);
+      const timer = setTimeout(() => {
+        setLogHidden(true);
+        setLogFadingOut(false);
+      }, 400);
+      return () => clearTimeout(timer);
+    }
+  }, [status, outputLines.length, logFadingOut, logHidden]);
+
   useEffect(() => {
     if (logRef.current) {
       logRef.current.scrollTop = logRef.current.scrollHeight;
@@ -45,9 +67,11 @@ export default function ApplyProgress({ applyId, projectPath, findings, onBack, 
   const cursorUrl = `cursor://file${encodeURI(projectPath)}`;
   const vscodeUrl = `vscode://file${encodeURI(projectPath)}`;
   const started = outputLines.length > 0;
+  const showLog = outputLines.length > 0 && !logHidden;
 
   return (
     <div className="apply-progress">
+      {/* Status header */}
       <div className="apply-progress-header">
         {status === "running" && (
           <>
@@ -56,17 +80,18 @@ export default function ApplyProgress({ applyId, projectPath, findings, onBack, 
           </>
         )}
         {status === "completed" && (
-          <h2 className="apply-progress-title apply-progress-title-done">
+          <h2 className="apply-progress-title apply-progress-title-done apply-fade-in">
             Optimizations applied
           </h2>
         )}
         {status === "failed" && (
-          <h2 className="apply-progress-title apply-progress-title-failed">
+          <h2 className="apply-progress-title apply-progress-title-failed apply-fade-in">
             Apply failed
           </h2>
         )}
       </div>
 
+      {/* Findings list */}
       {findings.length > 0 && (
         <div className="apply-findings-list">
           {findings.map((f, i) => {
@@ -94,14 +119,16 @@ export default function ApplyProgress({ applyId, projectPath, findings, onBack, 
         </div>
       )}
 
-      {outputLines.length > 0 && (
-        <div className="apply-output-log" ref={logRef}>
+      {/* Terminal output log — only while running */}
+      {showLog && (
+        <div className={`apply-output-log ${logFadingOut ? "apply-log-fade-out" : ""}`} ref={logRef}>
           {outputLines.map((line, i) => (
             <div key={i} className="apply-output-line">{line || "\u00A0"}</div>
           ))}
         </div>
       )}
 
+      {/* Waiting state */}
       {status === "running" && outputLines.length === 0 && (
         <div className="apply-progress-waiting">
           <span className="spinner" aria-hidden="true" />
@@ -109,43 +136,66 @@ export default function ApplyProgress({ applyId, projectPath, findings, onBack, 
         </div>
       )}
 
-      {status === "failed" && error && (
-        <div className="apply-error-message">{error}</div>
+      {/* Failed state */}
+      {status === "failed" && logHidden && (
+        <div className="apply-error-detail apply-fade-in">
+          {error && <p className="apply-error-message">{error}</p>}
+          <div className="apply-error-help">
+            <p className="apply-error-help-title">What you can do</p>
+            <ul className="apply-error-help-list">
+              <li>
+                Check the terminal where the server is running for the full error output.
+              </li>
+              <li>
+                Make sure <code>claude</code> CLI is installed and accessible — run <code>claude --version</code> in your terminal.
+              </li>
+              <li>
+                Verify the project path <code>{projectPath}</code> exists and is readable.
+              </li>
+              <li>
+                Try applying fewer findings at once — some combinations may conflict.
+              </li>
+            </ul>
+          </div>
+          <div className="apply-error-actions">
+            <button type="button" className="btn btn-primary" onClick={onRetry}>
+              Try again
+            </button>
+            <button type="button" className="btn btn-secondary" onClick={onBack}>
+              ← Back to report
+            </button>
+          </div>
+        </div>
       )}
 
-      <div className="apply-progress-actions">
-        {status === "completed" && (
-          <div className="apply-complete-actions">
-            <p className="apply-complete-hint">
+      {/* Completed state */}
+      {status === "completed" && logHidden && (
+        <div className="apply-success-card surface apply-fade-in">
+          <div className="apply-success-top">
+            <p className="apply-success-heading">Changes are ready for review</p>
+            <p className="apply-success-hint">
               Open the project in your editor to review and commit the changes.
             </p>
-            <div className="apply-complete-buttons">
-              <a href={cursorUrl} className="apply-open-btn apply-open-btn-primary">
+            <div className="apply-success-buttons">
+              <a href={cursorUrl} className="btn btn-primary">
                 Open in Cursor
               </a>
-              <a href={vscodeUrl} className="apply-open-btn">
+              <a href={vscodeUrl} className="btn btn-secondary">
                 Open in VS Code
               </a>
             </div>
-            <div className="apply-share-cta">
-              <p className="apply-share-text">
-                Nice work! Help other developers discover what they could optimize.
-              </p>
-              <button type="button" className="apply-open-btn" onClick={onShare}>
-                Spread the Word
-              </button>
-            </div>
           </div>
-        )}
-        {status === "failed" && (
-          <button type="button" className="apply-retry-btn" onClick={onRetry}>
-            Try again
-          </button>
-        )}
-        <button type="button" className="apply-back-link" onClick={onBack}>
-          &larr; Back to report
-        </button>
-      </div>
+          <div className="apply-share-section">
+            <p className="apply-share-heading">Help other developers optimize their code</p>
+            <p className="apply-share-description">
+              Share your results so others can discover what they could improve.
+            </p>
+            <button type="button" className="btn btn-primary apply-share-btn" onClick={onShare}>
+              Spread the Word
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

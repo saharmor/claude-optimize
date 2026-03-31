@@ -7,6 +7,7 @@ interface Props {
   projectPath: string;
   focusKey?: string | null;
   isSelected?: boolean;
+  isApplied?: boolean;
   onToggle?: () => void;
 }
 
@@ -24,7 +25,7 @@ function buildEditorUrl(
   return `${scheme}://file${encodeURI(absolutePath)}:${line}`;
 }
 
-export default function FindingCard({ finding, projectPath, focusKey, isSelected, onToggle }: Props) {
+export default function FindingCard({ finding, projectPath, focusKey, isSelected, isApplied, onToggle }: Props) {
   const [expanded, setExpanded] = useState(false);
   const [showMetricsHelp, setShowMetricsHelp] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
@@ -61,7 +62,7 @@ export default function FindingCard({ finding, projectPath, focusKey, isSelected
 
 
   return (
-    <div className="finding-card" ref={cardRef}>
+    <div className={`finding-card${isApplied ? " finding-card-applied" : ""}`} ref={cardRef}>
       <button
         type="button"
         className="finding-collapsed-row"
@@ -81,7 +82,10 @@ export default function FindingCard({ finding, projectPath, focusKey, isSelected
             </div>
           )}
           <div className="finding-collapsed-left-text">
-            <div className="finding-title">{finding.recommendation.title}</div>
+            <div className="finding-title">
+              {finding.recommendation.title}
+              {isApplied && <span className="finding-applied-badge">Applied</span>}
+            </div>
             <div className="finding-collapsed-impact">
               <div className="finding-impact-row finding-impact-row--compact">
                 <span className="finding-impact-item">

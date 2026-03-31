@@ -11,10 +11,11 @@ interface Props {
   projectPath: string;
   focusKey?: string | null;
   selectedKeys?: Set<string>;
+  appliedKeys?: Set<string>;
   onToggleFinding?: (key: string) => void;
 }
 
-export default function AnalyzerSection({ analyzer, findings, projectPath, focusKey, selectedKeys, onToggleFinding }: Props) {
+export default function AnalyzerSection({ analyzer, findings, projectPath, focusKey, selectedKeys, appliedKeys, onToggleFinding }: Props) {
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
@@ -71,8 +72,8 @@ export default function AnalyzerSection({ analyzer, findings, projectPath, focus
                 projectPath={projectPath}
                 focusKey={focusKey}
                 isSelected={selectedKeys?.has(key)}
+                isApplied={appliedKeys?.has(key)}
                 onToggle={onToggleFinding ? () => onToggleFinding(key) : undefined}
-
               />
             );
           })}

@@ -1147,6 +1147,27 @@ select {
   overflow: hidden;
 }
 
+.finding-card-applied {
+  opacity: 0.55;
+  border-color: var(--success, #22c55e);
+}
+
+.finding-applied-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 0.5rem;
+  padding: 0.1rem 0.5rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--success, #22c55e);
+  background: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.25);
+  border-radius: 999px;
+  vertical-align: middle;
+  text-transform: uppercase;
+}
+
 .finding-collapsed-row {
   display: flex;
   align-items: center;
@@ -2153,21 +2174,11 @@ select {
 
 /* ── Apply progress screen ── */
 
-.apply-progress-overlay {
-  background: var(--background);
-  overflow-y: auto;
-  animation: fade-in 0.2s ease;
-  display: flex;
-  justify-content: center;
-  padding: 3rem 1.5rem;
-  min-height: 60vh;
-}
-
 .apply-progress {
-  width: min(720px, 100%);
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
+  animation: fade-in 0.2s ease;
 }
 
 .apply-progress-header {
@@ -2213,6 +2224,25 @@ select {
   min-height: 1.1em;
 }
 
+.apply-log-fade-out {
+  animation: apply-fade-out 0.4s ease forwards;
+}
+
+@keyframes apply-fade-out {
+  from { opacity: 1; max-height: 400px; margin-bottom: 0; }
+  to   { opacity: 0; max-height: 0; padding: 0; margin-bottom: 0; overflow: hidden; }
+}
+
+.apply-fade-in {
+  animation: apply-fade-in 0.4s ease both;
+  animation-delay: 0.05s;
+}
+
+@keyframes apply-fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 .apply-progress-waiting {
   display: flex;
   align-items: center;
@@ -2226,118 +2256,131 @@ select {
   margin: 0;
 }
 
+/* ── Apply error state ── */
+
+.apply-error-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
 .apply-error-message {
   background: rgba(var(--danger-rgb, 181, 90, 72), 0.1);
   border: 1px solid rgba(var(--danger-rgb, 181, 90, 72), 0.25);
   color: var(--danger, #b55a48);
-  border-radius: 0.5rem;
-  padding: 0.75rem 1rem;
+  border-radius: 0.75rem;
+  padding: 0.85rem 1rem;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.apply-error-help {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 0.85rem;
+  padding: 1.25rem 1.5rem;
+}
+
+.apply-error-help-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 0.6rem;
+}
+
+.apply-error-help-list {
+  margin: 0;
+  padding-left: 1.25rem;
   font-size: 0.85rem;
-  line-height: 1.45;
-}
-
-.apply-progress-actions {
+  color: var(--text-secondary);
   display: flex;
   flex-direction: column;
+  gap: 0.4rem;
+  line-height: 1.55;
+}
+
+.apply-error-help-list code {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.82rem;
+  background: rgba(0, 0, 0, 0.05);
+  padding: 0.1rem 0.35rem;
+  border-radius: 0.25rem;
+}
+
+.apply-error-actions {
+  display: flex;
+  align-items: center;
   gap: 1rem;
-  padding-top: 0.5rem;
+  padding-top: 0.25rem;
 }
 
-.apply-complete-actions {
+/* ── Apply success state ── */
+
+.apply-success-card {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  padding: 0;
+  overflow: hidden;
 }
 
-.apply-complete-hint {
+.apply-success-top {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  padding: 1.5rem;
+}
+
+.apply-success-heading {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 650;
+  color: var(--foreground);
+}
+
+.apply-success-hint {
   margin: 0;
   font-size: 0.9rem;
-  color: var(--text-secondary, var(--foreground));
-}
-
-.apply-complete-buttons {
-  display: flex;
-  gap: 0.5rem;
-}
-
-.apply-share-cta {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  padding-top: 0.75rem;
-  border-top: 1px solid var(--border);
-  margin-top: 0.25rem;
-}
-
-.apply-share-text {
-  margin: 0;
-  font-size: 0.88rem;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   line-height: 1.5;
 }
 
-.apply-open-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0.5rem 1.2rem;
-  border-radius: 0.5rem;
-  font-size: 0.85rem;
-  font-weight: 600;
+.apply-success-buttons {
+  display: flex;
+  gap: 0.6rem;
+  padding-top: 0.25rem;
+}
+
+.apply-success-buttons .btn {
   text-decoration: none;
-  cursor: pointer;
-  border: 1px solid var(--border);
+}
+
+.apply-share-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 1.5rem;
+  background: var(--primary-soft);
+  border-top: 1px solid var(--border);
+}
+
+.apply-share-heading {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 650;
   color: var(--foreground);
-  background: none;
-  transition: background 0.15s ease;
 }
 
-.apply-open-btn:hover {
-  background: rgba(0, 0, 0, 0.04);
-}
-
-.apply-open-btn-primary {
-  background: var(--primary);
-  color: #fff;
-  border-color: var(--primary);
-}
-
-.apply-open-btn-primary:hover {
-  background: var(--primary-strong, #a85a36);
-}
-
-.apply-retry-btn {
-  background: var(--primary);
-  color: #fff;
-  border: none;
-  border-radius: 0.5rem;
-  padding: 0.5rem 1.2rem;
-  font-size: 0.85rem;
-  font-weight: 600;
-  cursor: pointer;
-  align-self: flex-start;
-  transition: background 0.15s ease;
-}
-
-.apply-retry-btn:hover {
-  background: var(--primary-strong, #a85a36);
-}
-
-.apply-back-link {
-  background: none;
-  border: none;
-  color: var(--info);
+.apply-share-description {
+  margin: 0;
   font-size: 0.88rem;
-  font-weight: 500;
-  cursor: pointer;
-  align-self: flex-start;
-  padding: 0;
-  text-decoration: none;
+  color: var(--text-secondary);
+  line-height: 1.5;
 }
 
-.apply-back-link:hover {
-  text-decoration: underline;
-  text-underline-offset: 2px;
+.apply-share-btn {
+  align-self: flex-start;
+  margin-top: 0.25rem;
 }
 
 /* ── Apply findings list ── */
@@ -2558,3 +2601,4 @@ select {
   gap: 0.75rem;
   margin-top: 0.25rem;
 }
+

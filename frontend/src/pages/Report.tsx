@@ -1,10 +1,11 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { getScanResult, startApply, subscribeScanStream } from "../api/client";
 import type { ScanResult, AnalyzerType, AnalyzerStatus, Finding } from "../types/scan";
 import { ALL_ANALYZERS, ANALYZER_LABELS } from "../types/scan";
 import { getFindingKey } from "../utils/findingKey";
 import { generatePrompt } from "../utils/generatePrompt";
+import { getAppliedFindings, markFindingsApplied } from "../utils/appliedFindings";
 import Scorecard from "../components/Scorecard";
 import AnalyzerSection from "../components/AnalyzerSection";
 import SelectionBar from "../components/SelectionBar";
@@ -62,6 +63,14 @@ export default function Report() {
   const [showShareModal, setShowShareModal] = useState(false);
   const [progressFadingOut, setProgressFadingOut] = useState(false);
   const [progressVisible, setProgressVisible] = useState(false);
+  const [appliedKeys, setAppliedKeys] = useState<Set<string>>(new Set());
+
+  // Load applied findings from localStorage when scan is available
+  useEffect(() => {
+    if (scanId) {
+      setAppliedKeys(getAppliedFindings(scanId));
+    }
+  }, [scanId]);
 
   const handleJumpToFinding = useCallback((category: string, title: string) => {
     setFocusKey(`${category}:${title}`);
@@ -112,10 +121,27 @@ export default function Report() {
     }
   }, [scan, getSelectedPrompt]);
 
+  const handleApplySuccess = useCallback(() => {
+    if (!scanId) return;
+    const keys = [...selectedKeys];
+    markFindingsApplied(scanId, keys);
+    setAppliedKeys((prev) => {
+      const next = new Set(prev);
+      for (const k of keys) next.add(k);
+      return next;
+    });
+  }, [scanId, selectedKeys]);
+
   const handleApplyBack = useCallback(() => {
+    // Deselect any findings that were successfully applied
+    setSelectedKeys((prev) => {
+      const next = new Set(prev);
+      for (const k of appliedKeys) next.delete(k);
+      return next;
+    });
     setApplyState(null);
     setApplyId(null);
-  }, []);
+  }, [appliedKeys]);
 
   const handleApplyRetry = useCallback(() => {
     setApplyState("confirm");
@@ -123,6 +149,7 @@ export default function Report() {
   }, []);
 
   // Manage progress bar fade-out when scan finishes
+  const fadeTimerRef = useRef<ReturnType<typeof setTimeout>>();
   useEffect(() => {
     if (!scan) return;
     const isLive = scan.status === "running" ||
@@ -134,13 +161,13 @@ export default function Report() {
       setProgressFadingOut(false);
     } else if (!isLive && progressVisible && !progressFadingOut) {
       setProgressFadingOut(true);
-      const timer = setTimeout(() => {
+      fadeTimerRef.current = setTimeout(() => {
         setProgressVisible(false);
         setProgressFadingOut(false);
       }, 500);
-      return () => clearTimeout(timer);
     }
   }, [scan, progressVisible, progressFadingOut]);
+  useEffect(() => () => { if (fadeTimerRef.current) clearTimeout(fadeTimerRef.current); }, []);
 
   useEffect(() => {
     if (!scanId) return;
@@ -422,16 +449,29 @@ export default function Report() {
     return (
       <>
         <div className="report-container">
-          <div className="apply-progress-overlay">
-            <ApplyProgress
-              applyId={applyId}
-              projectPath={scan.project_path}
-              findings={selectedFindings}
-              onBack={handleApplyBack}
-              onRetry={handleApplyRetry}
-              onShare={() => setShowShareModal(true)}
-            />
-          </div>
+          <header className="page-header-block report-project-header">
+            <button className="back-button" onClick={handleApplyBack}>
+              ← Back to report
+            </button>
+            <h1 className="page-title">{projectName}</h1>
+            {projectSummary && (
+              <>
+                <p className="report-project-one-liner">{projectSummary.one_liner}</p>
+                <p className="page-lede report-project-description">
+                  {projectSummary.description}
+                </p>
+              </>
+            )}
+          </header>
+          <ApplyProgress
+            applyId={applyId}
+            projectPath={scan.project_path}
+            findings={selectedFindings}
+            onBack={handleApplyBack}
+            onRetry={handleApplyRetry}
+            onShare={() => setShowShareModal(true)}
+            onApplySuccess={handleApplySuccess}
+          />
         </div>
         {showShareModal && (
           <ShareModal
@@ -535,6 +575,7 @@ export default function Report() {
               projectPath={scan.project_path}
               focusKey={focusKey}
               selectedKeys={selectedKeys}
+              appliedKeys={appliedKeys}
               onToggleFinding={toggleFinding}
             />
           ))}
