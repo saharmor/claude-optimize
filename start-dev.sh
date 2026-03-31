@@ -32,6 +32,7 @@ cleanup() {
 
 trap cleanup EXIT INT TERM
 
+require_command uv
 require_command python3
 require_command npm
 if ! command -v claude &>/dev/null; then
@@ -63,14 +64,11 @@ fi
 
 if [[ ! -d "$VENV_DIR" ]]; then
   echo "Creating backend virtual environment"
-  python3 -m venv "$VENV_DIR"
+  uv venv "$VENV_DIR"
 fi
 
-# shellcheck disable=SC1091
-source "$VENV_DIR/bin/activate"
-
 echo "Installing backend dependencies"
-python -m pip install -e "$BACKEND_DIR"
+uv pip install --python "$VENV_DIR/bin/python" -e "$BACKEND_DIR"
 
 if [[ ! -d "$FRONTEND_DIR/node_modules" ]]; then
   echo "Installing frontend dependencies"

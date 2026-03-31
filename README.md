@@ -28,8 +28,7 @@ Copy-paste this prompt into Claude Code, Cursor, or any AI coding agent:
 
 > Clone https://github.com/saharmor/claude-optimize, create a `.env` file from `.env.example`, run `./start-dev.sh`, and open the frontend URL in my browser.
 
-That's it — the agent will handle cloning, installing dependencies (Python 3.11+, Node.js 20+), and starting both servers. If you're logged into Claude Code (`claude login`), scans use your existing subscription at no extra cost. See [Authentication & Billing](#authentication--billing) for details.
-
+That's it — the agent will handle cloning, installing dependencies ([uv](https://docs.astral.sh/uv/getting-started/installation/), Python 3.11+, Node.js 20+), and starting both servers. If you're logged into Claude Code (`claude login`), scans use your existing subscription at no extra cost. See [Authentication & Billing](#authentication--billing) for details.
 
 ### Authentication & Billing
 

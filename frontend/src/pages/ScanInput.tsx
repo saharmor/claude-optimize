@@ -295,6 +295,7 @@ export default function ScanInput() {
       </div>
 
       <div className="landing-steps">
+        <h2 className="testimonials-heading">Why teams use Claude Optimize</h2>
         <div className="step-card">
           <span className="step-icon" aria-hidden="true">
             ↓
