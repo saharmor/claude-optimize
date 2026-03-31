@@ -3,10 +3,11 @@ import { useState, useEffect } from "react";
 interface Props {
   completed: number;
   total: number;
-  remainingAnalyzers?: string[];
+  runningAnalyzers?: string[];
+  pendingAnalyzers?: string[];
 }
 
-export default function ScanProgressBar({ completed, total, remainingAnalyzers = [] }: Props) {
+export default function ScanProgressBar({ completed, total, runningAnalyzers = [], pendingAnalyzers = [] }: Props) {
   const realPercent = total > 0 ? Math.round((completed / total) * 100) : 0;
   const isDone = completed >= total;
 
@@ -38,14 +39,31 @@ export default function ScanProgressBar({ completed, total, remainingAnalyzers =
           style={{ width: `${displayPercent}%` }}
         />
       </div>
-      {remainingAnalyzers.length > 0 && (
-        <ul className="scan-progress-remaining">
-          {remainingAnalyzers.map((name) => (
-            <li key={name} className="scan-progress-remaining-item">
-              {name}
-            </li>
-          ))}
-        </ul>
+      {!isDone && (
+        <div className="scan-progress-status">
+          {runningAnalyzers.length > 0 && (
+            <p className="scan-progress-running">
+              <span className="spinner scan-progress-spinner" aria-hidden="true" />
+              Running {runningAnalyzers.join(", ")}
+              {pendingAnalyzers.length > 0 && (
+                <span className="scan-progress-pending">
+                  {" "}— up next: {pendingAnalyzers.join(", ")}
+                </span>
+              )}
+            </p>
+          )}
+          {runningAnalyzers.length === 0 && pendingAnalyzers.length > 0 && (
+            <p className="scan-progress-running">
+              Starting analyzers...
+            </p>
+          )}
+          <p className="scan-progress-duration-note">
+            Analysis can take up to 10 minutes for large projects
+            {"Notification" in window && Notification.permission === "default" && (
+              <span> (approve notifications to get notified when ready)</span>
+            )}
+          </p>
+        </div>
       )}
     </div>
   );
