@@ -72,6 +72,27 @@ export default function Report() {
     }
   }, [scanId]);
 
+  const notifiedRef = useRef(false);
+
+  // Request notification permission when scan is running
+  useEffect(() => {
+    if (scan?.status === "running" && "Notification" in window && Notification.permission === "default") {
+      void Notification.requestPermission();
+    }
+  }, [scan?.status]);
+
+  // Send browser notification when analysis completes and tab is not focused
+  useEffect(() => {
+    if (streamComplete && !notifiedRef.current && document.hidden) {
+      notifiedRef.current = true;
+      if ("Notification" in window && Notification.permission === "granted") {
+        new Notification("Analysis complete", {
+          body: `Optimization audit for ${formatProjectName(scan?.project_path ?? "")} is ready.`,
+        });
+      }
+    }
+  }, [streamComplete, scan?.project_path]);
+
   const handleJumpToFinding = useCallback((category: string, title: string) => {
     setFocusKey(`${category}:${title}`);
   }, []);
@@ -544,8 +565,11 @@ export default function Report() {
               <ScanProgressBar
                 completed={completedCount}
                 total={ALL_ANALYZERS.length}
-                remainingAnalyzers={ALL_ANALYZERS.filter(
-                  (a) => scan.analyzer_statuses[a] === "pending" || scan.analyzer_statuses[a] === "running"
+                runningAnalyzers={ALL_ANALYZERS.filter(
+                  (a) => scan.analyzer_statuses[a] === "running"
+                ).map((a) => ANALYZER_LABELS[a])}
+                pendingAnalyzers={ALL_ANALYZERS.filter(
+                  (a) => scan.analyzer_statuses[a] === "pending"
                 ).map((a) => ANALYZER_LABELS[a])}
               />
             </div>
