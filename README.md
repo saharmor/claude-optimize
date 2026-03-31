@@ -8,6 +8,7 @@
 Scan your Claude-powered app and get a prioritized optimization report
 to improve performance and reduce latency + cost
 
+[**Get started in less than a minute →**](#quick-start)
 
 <img width="1287" height="519" alt="Screenshot 2026-03-30 at 2 46 42 PM" src="https://github.com/user-attachments/assets/c35efb10-5946-4650-a171-e13788fb4b99" />
 
@@ -25,9 +26,9 @@ to improve performance and reduce latency + cost
 
 Copy-paste this prompt into Claude Code, Cursor, or any AI coding agent:
 
-> Clone https://github.com/saharmor/claude-optimize, create a `.env` file with my `ANTHROPIC_API_KEY`, run `./start-dev.sh`, and open the frontend URL in my browser.
+> Clone https://github.com/saharmor/claude-optimize, create a `.env` file from `.env.example`, run `./start-dev.sh`, and open the frontend URL in my browser.
 
-That's it — the agent will handle cloning, installing dependencies (Python 3.11+, Node.js 20+), and starting both servers.
+That's it — the agent will handle cloning, installing dependencies (Python 3.11+, Node.js 20+), and starting both servers. If you're logged into Claude Code (`claude login`), scans use your existing subscription at no extra cost. See [Authentication & Billing](#authentication--billing) for details.
 
 ### Manual Setup
 
@@ -36,11 +37,22 @@ If you prefer to set things up yourself:
 ```bash
 git clone https://github.com/saharmor/claude-optimize.git
 cd claude-optimize
-cp .env.example .env        # add your ANTHROPIC_API_KEY
+cp .env.example .env
 ./start-dev.sh
 ```
 
 Requires Python 3.11+, Node.js 20.19+ or 22.12+, and the [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) installed and authenticated.
+
+### Authentication & Billing
+
+Claude Optimize runs scans using the Claude Code CLI. You can authenticate in two ways:
+
+| Method | How to set up | Billing |
+|---|---|---|
+| **Claude Code subscription** (recommended) | Run `claude login` — no API key needed | Covered by your existing Max subscription |
+| **API key** | Add `ANTHROPIC_API_KEY=sk-ant-...` to `.env` | Billed to your Anthropic API account |
+
+The startup script auto-detects which method to use. If `ANTHROPIC_API_KEY` is set, it takes priority and **API usage will be charged to that key**. If no key is set, the CLI falls back to your Claude Code subscription.
 
 The start script creates a virtual environment, installs all dependencies, and starts:
 - Backend on `http://localhost:8000`
@@ -85,7 +97,7 @@ That path is wired as a fast preview so you can see the report without waiting o
 ## Configuration
 
 ```bash
-ANTHROPIC_API_KEY=
+ANTHROPIC_API_KEY=                          # optional — see Authentication & Billing above
 CLAUDE_OPTIMIZE_MODEL=sonnet
 CLAUDE_OPTIMIZE_MAX_TURNS=12
 CLAUDE_OPTIMIZE_MAX_CONCURRENT_SCANS=2

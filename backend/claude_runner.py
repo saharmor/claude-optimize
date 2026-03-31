@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 TIMEOUT_SECONDS = 300
 MAX_TURNS = get_int_env("CLAUDE_OPTIMIZE_MAX_TURNS", default=12, min_value=1)
-MODEL_NAME = get_env("CLAUDE_OPTIMIZE_MODEL", default="sonnet")
+MODEL_NAME = get_env("CLAUDE_OPTIMIZE_MODEL", default="opus")
 SKIP_PERMISSIONS = get_bool_env("CLAUDE_OPTIMIZE_SKIP_PERMISSIONS", default=False)
 
 

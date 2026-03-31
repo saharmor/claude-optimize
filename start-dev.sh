@@ -40,10 +40,25 @@ fi
 
 load_env_file
 
-if [[ -z "${ANTHROPIC_API_KEY:-}" ]]; then
-  echo "ANTHROPIC_API_KEY is not set."
-  echo "Add it to .env or export it in your shell, then run this script again."
-  exit 1
+# Determine authentication mode.
+# Priority: ANTHROPIC_API_KEY (API billing) → Claude Code subscription (via `claude login`).
+if [[ -n "${ANTHROPIC_API_KEY:-}" ]]; then
+  echo "Using ANTHROPIC_API_KEY for authentication (billed to your API key)."
+else
+  # Check if the user is authenticated via Claude Code subscription
+  if command -v claude &>/dev/null && claude --version &>/dev/null 2>&1; then
+    echo "No ANTHROPIC_API_KEY found. Using Claude Code subscription for authentication."
+    echo "To use an API key instead, add ANTHROPIC_API_KEY to .env or export it in your shell."
+  else
+    echo "No authentication method found."
+    echo ""
+    echo "Option 1 (recommended): Log in with your Claude Code subscription:"
+    echo "  claude login"
+    echo ""
+    echo "Option 2: Add an API key to .env (billed to your Anthropic API account):"
+    echo "  echo 'ANTHROPIC_API_KEY=sk-ant-...' >> .env"
+    exit 1
+  fi
 fi
 
 if [[ ! -d "$VENV_DIR" ]]; then
