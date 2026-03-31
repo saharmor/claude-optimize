@@ -12,7 +12,7 @@ from settings import get_bool_env, get_env, get_int_env
 
 logger = logging.getLogger(__name__)
 
-TIMEOUT_SECONDS = 300
+TIMEOUT_SECONDS = 600
 MAX_TURNS = get_int_env("CLAUDE_OPTIMIZE_MAX_TURNS", default=12, min_value=1)
 MODEL_NAME = get_env("CLAUDE_OPTIMIZE_MODEL", default="opus")
 SKIP_PERMISSIONS = get_bool_env("CLAUDE_OPTIMIZE_SKIP_PERMISSIONS", default=False)
@@ -64,12 +64,12 @@ async def run_apply(
     try:
         await asyncio.wait_for(
             asyncio.gather(_stream_stdout(), _stream_stderr()),
-            timeout=600,
+            timeout=TIMEOUT_SECONDS,
         )
     except asyncio.TimeoutError:
         proc.kill()
         await proc.communicate()
-        raise RuntimeError("Apply timed out after 600s")
+        raise RuntimeError(f"Apply timed out after {TIMEOUT_SECONDS}s")
     except Exception:
         proc.kill()
         await proc.communicate()
@@ -78,7 +78,10 @@ async def run_apply(
     await proc.wait()
 
     if proc.returncode != 0:
-        err = b"".join(stderr_lines).decode() if stderr_lines else "Unknown error"
+        if stderr_lines:
+            err = b"".join(stderr_lines).decode().strip()
+        else:
+            err = "Unknown error (check server logs for full output)"
         raise RuntimeError(f"Claude Code exited with code {proc.returncode}: {err}")
 
     return "\n".join(output_lines)
@@ -163,7 +166,9 @@ async def _run_claude_prompt(prompt: str, project_path: str) -> str:
         raise RuntimeError(f"Analyzer timed out after {TIMEOUT_SECONDS}s")
 
     if proc.returncode != 0:
-        err = stderr.decode() if stderr else "Unknown error"
+        err_stderr = stderr.decode().strip() if stderr else ""
+        err_stdout = stdout.decode().strip() if stdout else ""
+        err = err_stderr or err_stdout or "Unknown error"
         raise RuntimeError(f"Claude Code exited with code {proc.returncode}: {err}")
 
     raw = stdout.decode()
