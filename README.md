@@ -30,18 +30,6 @@ Copy-paste this prompt into Claude Code, Cursor, or any AI coding agent:
 
 That's it — the agent will handle cloning, installing dependencies (Python 3.11+, Node.js 20+), and starting both servers. If you're logged into Claude Code (`claude login`), scans use your existing subscription at no extra cost. See [Authentication & Billing](#authentication--billing) for details.
 
-### Manual Setup
-
-If you prefer to set things up yourself:
-
-```bash
-git clone https://github.com/saharmor/claude-optimize.git
-cd claude-optimize
-cp .env.example .env
-./start-dev.sh
-```
-
-Requires Python 3.11+, Node.js 20.19+ or 22.12+, and the [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) installed and authenticated.
 
 ### Authentication & Billing
 
