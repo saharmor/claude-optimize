@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
+import shutil
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -12,10 +14,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from sse_starlette.sse import EventSourceResponse
 
 from apply_runner import run_apply_job
-from models import AnalyzerStatus, AnalyzerType, ApplyRequest, ApplyResult, RecentProjectsResponse, ScanRequest, ScanResult
+from models import AnalyzerStatus, AnalyzerType, ApplyRequest, ApplyResult, CloneRequest, RecentProjectsResponse, ScanRequest, ScanResult
 from orchestrator import is_sample_project, run_sample_project_scan, run_scan
 from recent_projects import list_recent_projects
-from settings import get_env
+from settings import get_bool_env, get_env
 from store import apply_store, store
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
@@ -128,6 +130,70 @@ app.add_middleware(
 @app.get("/api/health")
 async def health_check():
     return {"status": "ok"}
+
+
+@app.get("/api/config")
+async def get_config():
+    return {
+        "show_github_clone": get_bool_env("CLAUDE_OPTIMIZE_SHOW_GITHUB_CLONE", default=False),
+    }
+
+
+_GITHUB_URL_RE = re.compile(r"^https://github\.com/[\w.\-]+/[\w.\-]+(\.git)?$")
+
+
+@app.post("/api/clone")
+async def clone_repo(request: CloneRequest):
+    if not _GITHUB_URL_RE.match(request.github_url):
+        raise HTTPException(
+            status_code=400,
+            detail="Only HTTPS GitHub URLs are supported (e.g. https://github.com/owner/repo).",
+        )
+
+    dest = Path(request.destination).expanduser().resolve()
+
+    # Reuse the same path validation as /api/scan
+    if any(part in SENSITIVE_PATH_PARTS for part in dest.parts):
+        raise HTTPException(status_code=400, detail="Refusing to clone into a sensitive directory.")
+    if any(_is_relative_to(dest, prefix) for prefix in SENSITIVE_PATH_PREFIXES):
+        raise HTTPException(status_code=400, detail="Refusing to clone into a sensitive directory.")
+    allowed_roots = _get_allowed_scan_roots()
+    if not any(_is_relative_to(dest, root) for root in allowed_roots):
+        allowed_text = ", ".join(str(root) for root in allowed_roots)
+        raise HTTPException(
+            status_code=400,
+            detail=f"Clone destination must be inside an allowed root: {allowed_text}",
+        )
+
+    if dest.exists() and any(dest.iterdir()):
+        raise HTTPException(status_code=400, detail=f"Destination directory already exists and is not empty: {dest}")
+
+    dest.mkdir(parents=True, exist_ok=True)
+
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "git", "clone", request.github_url, str(dest),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
+    except asyncio.TimeoutError:
+        proc.kill()
+        shutil.rmtree(dest, ignore_errors=True)
+        raise HTTPException(status_code=504, detail="Clone timed out after 120 seconds.")
+    except FileNotFoundError:
+        shutil.rmtree(dest, ignore_errors=True)
+        raise HTTPException(status_code=500, detail="git is not installed or not found in PATH.")
+
+    if proc.returncode != 0:
+        shutil.rmtree(dest, ignore_errors=True)
+        err_text = (stderr or stdout or b"").decode().strip()
+        raise HTTPException(
+            status_code=400,
+            detail=f"git clone failed: {err_text}",
+        )
+
+    return {"path": str(dest)}
 
 
 @app.get("/api/projects/recent", response_model=RecentProjectsResponse)
