@@ -4,19 +4,32 @@ export type AnalyzerType =
   | "batching"
   | "tool_use"
   | "structured_outputs"
-  | "model_upgrade";
+  | "model_upgrade"
+  | "claude_md_bloat"
+  | "mcp_tool_bloat";
 
+export type AnalyzerGroup = "api" | "agentic";
 export type AnalyzerStatus = "pending" | "running" | "completed" | "failed";
 export type Severity = "high" | "medium" | "low";
 export type ProjectSource = "sample_project" | "cursor" | "vscode" | "claude_code";
 
-export const ALL_ANALYZERS: AnalyzerType[] = [
+export const API_ANALYZERS: AnalyzerType[] = [
   "prompt_engineering",
   "prompt_caching",
   "batching",
   "tool_use",
   "structured_outputs",
   "model_upgrade",
+];
+
+export const AGENTIC_ANALYZERS: AnalyzerType[] = [
+  "claude_md_bloat",
+  "mcp_tool_bloat",
+];
+
+export const ALL_ANALYZERS: AnalyzerType[] = [
+  ...API_ANALYZERS,
+  ...AGENTIC_ANALYZERS,
 ];
 
 export interface CodeLocation {
@@ -79,7 +92,7 @@ export interface ScanResult {
   scan_id: string;
   project_path: string;
   status: "pending" | "running" | "completed" | "failed";
-  analyzer_statuses: Record<AnalyzerType, AnalyzerStatus>;
+  analyzer_statuses: Partial<Record<AnalyzerType, AnalyzerStatus>>;
   analyzer_errors: Partial<Record<AnalyzerType, string>>;
   analyzer_notes: Partial<Record<AnalyzerType, string>>;
   findings: Finding[];
@@ -116,5 +129,12 @@ export const ANALYZER_LABELS: Record<AnalyzerType, string> = {
   tool_use: "Tool Use",
   structured_outputs: "Structured Outputs",
   model_upgrade: "Model Upgrade",
+  claude_md_bloat: "CLAUDE.md Context Bloat",
+  mcp_tool_bloat: "MCP Tool Bloat",
+};
+
+export const ANALYZER_GROUP_LABELS: Record<AnalyzerGroup, string> = {
+  api: "API Optimization",
+  agentic: "Agentic",
 };
 

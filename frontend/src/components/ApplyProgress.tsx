@@ -81,7 +81,7 @@ export default function ApplyProgress({ applyId, projectPath, findings, onBack, 
     );
 
     return unsubscribe;
-  }, [applyId]);
+  }, [applyId, onApplySuccess]);
 
   // Fire confetti when success card becomes visible, waiting for focus if needed
   const confettiCleanup = useRef<(() => void) | null>(null);
@@ -217,13 +217,13 @@ export default function ApplyProgress({ applyId, projectPath, findings, onBack, 
                 Check the terminal where the server is running for the full error output.
               </li>
               <li>
-                Make sure <code>claude</code> CLI is installed and accessible — run <code>claude --version</code> in your terminal.
+                Make sure <code>claude</code> CLI is installed and accessible. Run <code>claude --version</code> in your terminal.
               </li>
               <li>
                 Verify the project path <code>{projectPath}</code> exists and is readable.
               </li>
               <li>
-                Try applying fewer findings at once — some combinations may conflict.
+                Try applying fewer findings at once. Some combinations may conflict.
               </li>
             </ul>
           </div>

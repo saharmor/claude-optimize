@@ -1,13 +1,19 @@
 import { useState, useEffect } from "react";
 
+export interface AnalyzerGroupInfo {
+  label: string;
+  analyzers: { name: string; status: "pending" | "running" | "completed" | "failed" }[];
+}
+
 interface Props {
   completed: number;
   total: number;
   runningAnalyzers?: string[];
   pendingAnalyzers?: string[];
+  groups?: AnalyzerGroupInfo[];
 }
 
-export default function ScanProgressBar({ completed, total, runningAnalyzers = [], pendingAnalyzers = [] }: Props) {
+export default function ScanProgressBar({ completed, total, runningAnalyzers = [], pendingAnalyzers = [], groups }: Props) {
   const realPercent = total > 0 ? Math.round((completed / total) * 100) : 0;
   const isDone = completed >= total;
 
@@ -19,7 +25,7 @@ export default function ScanProgressBar({ completed, total, runningAnalyzers = [
     return () => clearTimeout(timer);
   }, [realPercent, isDone]);
 
-  const displayPercent = isDone ? 100 : Math.max(realPercent, realPercent === 0 ? fakePercent : realPercent);
+  const displayPercent = isDone ? 100 : realPercent === 0 ? fakePercent : realPercent;
 
   return (
     <div className="scan-progress">
@@ -47,7 +53,7 @@ export default function ScanProgressBar({ completed, total, runningAnalyzers = [
               Running {runningAnalyzers.join(", ")}
               {pendingAnalyzers.length > 0 && (
                 <span className="scan-progress-pending">
-                  {" "}— up next: {pendingAnalyzers.join(", ")}
+                  {" · "}up next: {pendingAnalyzers.join(", ")}
                 </span>
               )}
             </p>
@@ -57,6 +63,39 @@ export default function ScanProgressBar({ completed, total, runningAnalyzers = [
               Starting analyzers...
             </p>
           )}
+
+          {groups && groups.length > 0 && (
+            <div className="scan-progress-groups">
+              {groups.map((group) => {
+                const groupCompleted = group.analyzers.filter((a) => a.status === "completed").length;
+                return (
+                  <div key={group.label} className="scan-progress-group">
+                    <div className="scan-progress-group-header">
+                      <span>{group.label}</span>
+                      <span className="scan-progress-group-count">
+                        ({groupCompleted}/{group.analyzers.length})
+                      </span>
+                    </div>
+                    <div className="scan-progress-group-analyzers">
+                      {group.analyzers.map((analyzer) => (
+                        <span
+                          key={analyzer.name}
+                          className={`scan-progress-analyzer-item scan-progress-analyzer-item--${analyzer.status}`}
+                        >
+                          <span
+                            className={`scan-progress-analyzer-dot scan-progress-analyzer-dot--${analyzer.status}`}
+                            aria-hidden="true"
+                          />
+                          {analyzer.name}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
           <p className="scan-progress-duration-note">
             Analysis can take up to 10 minutes for large projects
             {"Notification" in window && Notification.permission === "default" && (

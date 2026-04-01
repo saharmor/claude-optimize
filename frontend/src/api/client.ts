@@ -47,6 +47,34 @@ function formatApiErrorDetail(detail: unknown, fallback: string): string {
   return fallback;
 }
 
+export async function getConfig(): Promise<{ show_github_clone: boolean }> {
+  const res = await fetch("/api/config");
+  if (!res.ok) return { show_github_clone: false };
+  return res.json();
+}
+
+export async function cloneRepo(
+  githubUrl: string,
+  destination: string
+): Promise<{ path: string }> {
+  const res = await fetch("/api/clone", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ github_url: githubUrl, destination }),
+  });
+
+  if (!res.ok) {
+    const err = (await res.json().catch(() => ({ detail: res.statusText }))) as {
+      detail?: unknown;
+    };
+    throw new Error(
+      formatApiErrorDetail(err.detail, res.statusText || "Failed to clone repository")
+    );
+  }
+
+  return res.json();
+}
+
 export async function startScan(
   projectPath: string
 ): Promise<{ scan_id: string; status: string }> {
@@ -231,8 +259,10 @@ export function subscribeApplyStream(
   });
 
   es.addEventListener("apply_failed", (e) => {
+    finished = true;
     const data = parseData(e.data);
     onFailed(typeof data.error === "string" ? data.error : "Apply failed");
+    es.close();
   });
 
   es.addEventListener("stream_complete", () => {

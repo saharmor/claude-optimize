@@ -2,18 +2,20 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { getScanResult, startApply, subscribeScanStream } from "../api/client";
 import type { ScanResult, AnalyzerType, AnalyzerStatus, Finding } from "../types/scan";
-import { ALL_ANALYZERS, ANALYZER_LABELS } from "../types/scan";
+import { ALL_ANALYZERS, API_ANALYZERS, AGENTIC_ANALYZERS, ANALYZER_LABELS, ANALYZER_GROUP_LABELS } from "../types/scan";
 import { getFindingKey } from "../utils/findingKey";
 import { generatePrompt } from "../utils/generatePrompt";
 import { getAppliedFindings, markFindingsApplied } from "../utils/appliedFindings";
 import Scorecard from "../components/Scorecard";
 import AnalyzerSection from "../components/AnalyzerSection";
+import NextSteps from "../components/NextSteps";
 import SelectionBar from "../components/SelectionBar";
 import PromptModal from "../components/PromptModal";
 import ApplyConfirmModal from "../components/ApplyConfirmModal";
 import ApplyProgress from "../components/ApplyProgress";
 import ShareModal from "../components/ShareModal";
 import { Button, EmptyState, ScanProgressBar } from "../components/ui";
+import type { AnalyzerGroupInfo } from "../components/ui/ScanProgressBar";
 
 const SEVERITY_ORDER: Record<string, number> = {
   high: 0,
@@ -392,14 +394,9 @@ export default function Report() {
     );
   }
 
-  const findingsByCategory: Record<AnalyzerType, Finding[]> = {
-    prompt_engineering: [],
-    prompt_caching: [],
-    batching: [],
-    tool_use: [],
-    structured_outputs: [],
-    model_upgrade: [],
-  };
+  const findingsByCategory = Object.fromEntries(
+    ALL_ANALYZERS.map((a) => [a, [] as Finding[]])
+  ) as Record<AnalyzerType, Finding[]>;
 
   for (const finding of scan.findings) {
     if (findingsByCategory[finding.category]) {
@@ -418,20 +415,21 @@ export default function Report() {
   const completedAnalyzers = ALL_ANALYZERS.filter(
     (analyzer) => scan.analyzer_statuses[analyzer] === "completed"
   ).sort((a, b) => findingsByCategory[b].length - findingsByCategory[a].length);
+  const completedApiAnalyzers = completedAnalyzers.filter((a) => API_ANALYZERS.includes(a));
+  const completedAgenticAnalyzers = completedAnalyzers.filter((a) => AGENTIC_ANALYZERS.includes(a));
   const cleanCategories = completedAnalyzers.filter(
     (analyzer) => findingsByCategory[analyzer].length === 0
   );
   const hasFindings = scan.findings.length > 0;
-  const completedCount = Object.values(scan.analyzer_statuses).filter(
-    (status) => status === "completed"
-  ).length;
   const auditRunning = scan.status === "running";
   const noClaudeUsage = scan.no_claude_usage === true;
+  // When no API usage, only count the analyzers that actually ran
+  const activeAnalyzers = noClaudeUsage ? AGENTIC_ANALYZERS : ALL_ANALYZERS;
   const summaryRunning =
     scan.project_summary_status === "pending" || scan.project_summary_status === "running";
   const hasPartialFailure = Boolean(scan.error) && scan.status === "completed";
   const projectName = formatProjectName(scan.project_path);
-  const failedAnalyzers = ALL_ANALYZERS.filter(
+  const failedAnalyzers = activeAnalyzers.filter(
     (a) => scan.analyzer_statuses[a] === "failed"
   );
   // Group failed analyzers by their error message so we don't repeat the same error 6 times
@@ -446,7 +444,7 @@ export default function Report() {
     }
   }
 
-  const allSameError = errorGroups.length === 1 && failedAnalyzers.length === ALL_ANALYZERS.length;
+  const allSameError = errorGroups.length === 1 && failedAnalyzers.length === activeAnalyzers.length;
   const emptyStateTitle =
     scan.status === "failed"
       ? "Optimization audit failed"
@@ -460,7 +458,9 @@ export default function Report() {
         : scan.error || "An unknown error occurred"
       : hasPartialFailure
         ? "Some analyzers failed before they could return results, so this optimization audit finished without any confirmed findings. Review the error details and try again after fixing the project setup."
-        : "Your codebase looks well-optimized. No issues were detected in this optimization audit.";
+        : noClaudeUsage
+          ? "This project doesn't appear to use the Claude API or Claude Code agentic features (CLAUDE.md, MCP servers). No optimization opportunities were found."
+          : "Your codebase looks well-optimized. No issues were detected across API and agentic analyzers.";
   const projectSummary = scan.project_summary;
   const showSummaryLoading = summaryRunning && !projectSummary;
 
@@ -531,14 +531,7 @@ export default function Report() {
         )}
       </header>
 
-      {noClaudeUsage ? (
-        <EmptyState
-          className="fade-in-up"
-          title="No Claude API usage detected"
-          description="This project doesn't appear to use the Anthropic Claude API. The audit analyzes Claude API calls for optimization opportunities and won't produce findings for projects using other LLM providers."
-        />
-      ) : (
-        <>
+      <>
           {scan.error && hasFindings && scan.status === "completed" && (
             <div className="error-message">
               <p>{scan.error}</p>
@@ -547,7 +540,7 @@ export default function Report() {
                   {errorGroups.map((group, i) => (
                     <li key={i}>
                       <strong>
-                        {group.analyzers.length === ALL_ANALYZERS.length
+                        {group.analyzers.length === activeAnalyzers.length
                           ? "All analyzers"
                           : group.analyzers.join(", ")}
                         :
@@ -563,14 +556,40 @@ export default function Report() {
           {progressVisible && (
             <div className={progressFadingOut ? "fade-out" : ""}>
               <ScanProgressBar
-                completed={completedCount}
-                total={ALL_ANALYZERS.length}
-                runningAnalyzers={ALL_ANALYZERS.filter(
+                completed={activeAnalyzers.filter(
+                  (a) => scan.analyzer_statuses[a] === "completed"
+                ).length}
+                total={activeAnalyzers.length}
+                runningAnalyzers={activeAnalyzers.filter(
                   (a) => scan.analyzer_statuses[a] === "running"
                 ).map((a) => ANALYZER_LABELS[a])}
-                pendingAnalyzers={ALL_ANALYZERS.filter(
+                pendingAnalyzers={activeAnalyzers.filter(
                   (a) => scan.analyzer_statuses[a] === "pending"
                 ).map((a) => ANALYZER_LABELS[a])}
+                groups={(() => {
+                  const groups: AnalyzerGroupInfo[] = [];
+                  const apiAnalyzers = API_ANALYZERS.filter((a) => activeAnalyzers.includes(a));
+                  if (apiAnalyzers.length > 0) {
+                    groups.push({
+                      label: ANALYZER_GROUP_LABELS.api,
+                      analyzers: apiAnalyzers.map((a) => ({
+                        name: ANALYZER_LABELS[a],
+                        status: (scan.analyzer_statuses[a] ?? "pending") as "pending" | "running" | "completed" | "failed",
+                      })),
+                    });
+                  }
+                  const agenticAnalyzers = AGENTIC_ANALYZERS.filter((a) => activeAnalyzers.includes(a));
+                  if (agenticAnalyzers.length > 0) {
+                    groups.push({
+                      label: ANALYZER_GROUP_LABELS.agentic,
+                      analyzers: agenticAnalyzers.map((a) => ({
+                        name: ANALYZER_LABELS[a],
+                        status: (scan.analyzer_statuses[a] ?? "pending") as "pending" | "running" | "completed" | "failed",
+                      })),
+                    });
+                  }
+                  return groups;
+                })()}
               />
             </div>
           )}
@@ -585,24 +604,53 @@ export default function Report() {
             />
           )}
 
-          {hasFindings && (
-            <p className="selection-helper-text">
-              Review the findings and select the ones you want to fix
-            </p>
+          {hasFindings && streamComplete && (
+            <NextSteps selectedCount={selectedKeys.size} />
           )}
 
-          {completedAnalyzers.map((analyzer) => (
-            <AnalyzerSection
-              key={analyzer}
-              analyzer={analyzer}
-              findings={findingsByCategory[analyzer]}
-              projectPath={scan.project_path}
-              focusKey={focusKey}
-              selectedKeys={selectedKeys}
-              appliedKeys={appliedKeys}
-              onToggleFinding={toggleFinding}
-            />
-          ))}
+          {/* --- API Optimization Section --- */}
+          {completedApiAnalyzers.length > 0 && (
+            <div className="analyzer-group">
+              <h2 className="analyzer-group-title">{ANALYZER_GROUP_LABELS.api}</h2>
+              {noClaudeUsage ? (
+                <p className="analyzer-group-note">
+                  No Claude API usage detected. API analyzers were skipped.
+                </p>
+              ) : (
+                completedApiAnalyzers.map((analyzer) => (
+                  <AnalyzerSection
+                    key={analyzer}
+                    analyzer={analyzer}
+                    findings={findingsByCategory[analyzer]}
+                    projectPath={scan.project_path}
+                    focusKey={focusKey}
+                    selectedKeys={selectedKeys}
+                    appliedKeys={appliedKeys}
+                    onToggleFinding={toggleFinding}
+                  />
+                ))
+              )}
+            </div>
+          )}
+
+          {/* --- Agentic Section --- */}
+          {completedAgenticAnalyzers.length > 0 && (
+            <div className="analyzer-group">
+              <h2 className="analyzer-group-title">{ANALYZER_GROUP_LABELS.agentic}</h2>
+              {completedAgenticAnalyzers.map((analyzer) => (
+                <AnalyzerSection
+                  key={analyzer}
+                  analyzer={analyzer}
+                  findings={findingsByCategory[analyzer]}
+                  projectPath={scan.project_path}
+                  focusKey={focusKey}
+                  selectedKeys={selectedKeys}
+                  appliedKeys={appliedKeys}
+                  onToggleFinding={toggleFinding}
+                />
+              ))}
+            </div>
+          )}
 
           {!hasFindings && !auditRunning && (cleanCategories.length === 0 || errorGroups.length > 0) && (
             <>
@@ -614,7 +662,7 @@ export default function Report() {
                     {errorGroups.map((group, i) => (
                       <li key={i} className="analyzer-error-item">
                         <strong>
-                          {group.analyzers.length === ALL_ANALYZERS.length
+                          {group.analyzers.length === activeAnalyzers.length
                             ? "All analyzers"
                             : group.analyzers.join(", ")}
                         </strong>
@@ -654,8 +702,7 @@ export default function Report() {
               )}
             </>
           )}
-        </>
-      )}
+      </>
 
       <div className="report-actions">
         {hasFindings && streamComplete && (
