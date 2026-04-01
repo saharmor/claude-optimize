@@ -16,6 +16,8 @@ from models import (
 )
 
 _FILE = "classifier.py"
+_CLAUDE_MD = "CLAUDE.md"
+_CLAUDE_SETTINGS = ".claude/settings.json"
 
 DEMO_FINDINGS: list[Finding] = [
     # -------------------------------------------------------------------------
@@ -68,7 +70,7 @@ Classify the incoming support ticket and draft a response.
 </task>
 
 <output_schema>
-Return ONLY valid JSON — no prose, no markdown fences:
+Return ONLY valid JSON, no prose, no markdown fences:
 {
   "category": "shipping|returns|billing|technical|general",
   "priority": "low|medium|high|urgent",
@@ -216,7 +218,7 @@ def process_ticket_backlog(tickets: list[dict]) -> list[dict]:
         for ticket in tickets
     ]
 
-    # Submit the entire backlog — 50% cost savings vs. sequential calls
+    # Submit the entire backlog (50% cost savings vs. sequential calls)
     batch = client.messages.batches.create(requests=requests)
 
     # Poll until complete
@@ -276,7 +278,7 @@ response = client.messages.create(
         recommendation=Recommendation(
             title="Pass only the tools needed for the current task",
             description=(
-                "Classification calls need zero tools — remove them entirely. "
+                "Classification calls need zero tools, so remove them entirely. "
                 "For full-resolution calls, pass only the relevant subset "
                 "(e.g., lookup_customer + escalate_ticket). "
                 "Fewer tools means a smaller prompt, lower cost, and fewer hallucinated calls."
@@ -286,12 +288,12 @@ response = client.messages.create(
         suggested_fix=CodeSnippet(
             description="Remove tools from the classification call; use a scoped subset for resolution calls",
             code_snippet="""\
-# Classification needs no tools — remove them entirely
+# Classification needs no tools, remove them entirely
 response = client.messages.create(
     model="claude-sonnet-4-6",
     max_tokens=1024,
     system=[{"type": "text", "text": SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}}],
-    # tools parameter omitted — saves ~1,500 tokens per call
+    # tools parameter omitted (saves ~1,500 tokens per call)
     messages=[{"role": "user", "content": user_message}]
 )
 
@@ -330,12 +332,12 @@ response = client.messages.create(
                 "The API call uses claude-sonnet-4-5-20250514, an older Sonnet version. "
                 "Claude Sonnet 4.6 is available at the same price with better performance, "
                 "lower latency, and improved instruction following. Note: the code also "
-                "prefills the assistant message to force JSON output — this will return a "
+                "prefills the assistant message to force JSON output. This will return a "
                 "400 error on Sonnet 4.6, so it must be removed as part of the upgrade."
             ),
             code_snippet="""\
 response = client.messages.create(
-    model="claude-sonnet-4-5-20250514",   # ← outdated model version
+    model="claude-sonnet-4-5-20250514",   # ← outdated model version (sample uses claude-sonnet-4-6 but this demo illustrates the upgrade path)
     max_tokens=1024,
     system=SYSTEM_PROMPT,
     tools=ALL_TOOLS,
@@ -375,7 +377,7 @@ response = client.messages.create(
     tools=ALL_TOOLS,
     output_config={"effort": "low"},      # ← match Sonnet 4.5 latency profile
     messages=[{"role": "user", "content": user_message}]
-    # Prefill removed — use structured outputs for guaranteed JSON
+    # Prefill removed. Use structured outputs for guaranteed JSON
 )
 """,
             language="python",
@@ -404,7 +406,7 @@ response = client.messages.create(
             description=(
                 "The code asks Claude to 'return JSON' in the prompt, then tries json.loads, "
                 "falls back to regex extraction, and retries up to 3 times with exponential "
-                "backoff. This is fragile — Claude may wrap JSON in markdown fences, add "
+                "backoff. This is fragile: Claude may wrap JSON in markdown fences, add "
                 "commentary, or produce subtle schema mismatches."
             ),
             code_snippet="""\
@@ -437,7 +439,7 @@ for attempt in range(max_retries):
             title="Use native structured outputs instead of 'return JSON' prompts",
             description=(
                 "Claude's structured outputs feature guarantees the response matches your "
-                "Pydantic schema on every call — no retries, no regex, no exponential backoff. "
+                "Pydantic schema on every call. No retries, no regex, no exponential backoff. "
                 "Use client.messages.parse() with an output_schema argument."
             ),
             docs_url="https://docs.anthropic.com/en/docs/build-with-claude/structured-outputs",
@@ -453,7 +455,7 @@ class TicketClassification(BaseModel):
     suggested_response: str
 
 def classify_ticket(ticket: dict) -> dict:
-    \"\"\"Classify a ticket using native structured outputs — no retries needed.\"\"\"
+    \"\"\"Classify a ticket using native structured outputs. No retries needed.\"\"\"
     response = client.messages.parse(
         model="claude-sonnet-4-6",
         max_tokens=1024,
@@ -462,7 +464,7 @@ def classify_ticket(ticket: dict) -> dict:
         output_schema=TicketClassification,
     )
 
-    # response.parsed is a validated TicketClassification — always correct shape
+    # response.parsed is a validated TicketClassification, always correct shape
     result = response.parsed
     return {
         "category": result.category,
@@ -479,6 +481,286 @@ def classify_ticket(ticket: dict) -> dict:
             reliability_improvement="high",
             estimated_savings_detail=(
                 "Eliminates all parsing retries. With the current ~30% failure rate, that's roughly a third of calls you stop paying for twice."
+            ),
+        ),
+        confidence="high",
+        effort="low",
+    ),
+    # -------------------------------------------------------------------------
+    # CLAUDE.md Context Bloat
+    # -------------------------------------------------------------------------
+    Finding(
+        category=AnalyzerType.CLAUDE_MD_BLOAT,
+        model="",
+        location=CodeLocation(file=_CLAUDE_MD, lines="1-95"),
+        current_state=CodeSnippet(
+            description=(
+                "CLAUDE.md is ~3,200 tokens and loaded on every Claude Code turn. "
+                "It contains an 800-token deployment guide and a 400-token testing "
+                "section that are only needed for specific workflows, plus 200 tokens "
+                "of duplicate style guidelines and 3 references to files that no longer exist."
+            ),
+            code_snippet="""\
+# ShopFlow Support Classifier
+
+## Project Overview
+This is the ShopFlow customer support ticket classifier...
+(~200 tokens of project description)
+
+## Code Style Guidelines
+- Use type hints for all function parameters and return values
+- Use type hints on every function signature
+- Always annotate function arguments with types
+(duplicate instructions, same concept stated 3 ways)
+
+## Deployment Guide
+### Prerequisites
+- AWS CLI configured with production credentials
+- Docker 24+ installed
+- Access to the shopflow-prod ECR repository
+### Steps
+1. Build the Docker image: `docker build -t shopflow-classifier .`
+2. Tag for ECR: `docker tag shopflow-classifier:latest ...`
+3. Push to ECR: `docker push ...`
+4. Update ECS task definition...
+5. Run database migrations...
+(~800 tokens of deployment instructions)
+
+## Testing Instructions
+### Unit Tests
+Run `pytest tests/unit -v` for unit tests...
+### Integration Tests
+Set up test database with `docker compose up -d postgres`...
+(~400 tokens of testing instructions)
+
+## File References
+- See `src/legacy_router.py` for the old routing logic
+- Config in `config/staging.yaml` for staging environment
+- Check `scripts/deploy_v1.sh` for the old deploy script
+(none of these files exist in the project)
+""",
+            language="markdown",
+        ),
+        recommendation=Recommendation(
+            title="Reduce CLAUDE.md from 3,200 to ~1,100 tokens by extracting workflow sections",
+            description=(
+                "CLAUDE.md loads into context on every single Claude Code turn. At 3,200 tokens "
+                "across a 30-turn session, that's ~96,000 tokens of repeated context.\n\n"
+                "Extract the Deployment Guide (800 tokens) and Testing Instructions (400 tokens) "
+                "into on-demand command files under `.claude/commands/`. These only load when "
+                "explicitly invoked (e.g., `/project:deploy`), not on every turn.\n\n"
+                "Also remove duplicate style guidelines and stale file references to files "
+                "that no longer exist in the project."
+            ),
+            docs_url="https://docs.anthropic.com/en/docs/claude-code/memory",
+        ),
+        suggested_fix=CodeSnippet(
+            description=(
+                "Optimized CLAUDE.md (~1,100 tokens) with deployment and testing "
+                "extracted to .claude/commands/"
+            ),
+            code_snippet="""\
+# ShopFlow Support Classifier
+
+## Overview
+Customer support ticket classifier using Claude API. Categorizes tickets
+by type and priority, generates draft responses.
+
+## Stack
+- Python 3.11, FastAPI, Pydantic
+- Claude Sonnet 4.6 via Anthropic SDK
+- PostgreSQL for ticket storage
+
+## Conventions
+- Type hints on all function signatures and return values
+- Pydantic models for all API request/response schemas
+- XML tags in prompts to separate concerns
+
+## Key Files
+- `classifier.py`: main classification logic and API calls
+- `sample_tickets.json`: test fixture data
+
+---
+Extracted to on-demand commands:
+- `.claude/commands/deploy.md`: deployment guide (invoke with /project:deploy)
+- `.claude/commands/test.md`: testing instructions (invoke with /project:test)
+""",
+            language="markdown",
+        ),
+        impact=Impact(
+            cost_reduction="high",
+            latency_reduction="medium",
+            reliability_improvement="medium",
+            estimated_savings_detail=(
+                "Cuts ~2,100 tokens per turn. Over a 30-turn session, that's ~63,000 fewer "
+                "repeated context tokens, a 66% reduction in CLAUDE.md overhead."
+            ),
+        ),
+        confidence="high",
+        effort="low",
+    ),
+    # -------------------------------------------------------------------------
+    # CLAUDE.md: No Custom Commands
+    # -------------------------------------------------------------------------
+    Finding(
+        category=AnalyzerType.CLAUDE_MD_BLOAT,
+        model="",
+        location=CodeLocation(file=".", lines=""),
+        current_state=CodeSnippet(
+            description=(
+                "No `.claude/commands/` directory exists. This project has deployment "
+                "workflows (Docker + AWS ECR + EKS), database migrations (Alembic), "
+                "and a multi-stage test pipeline (unit, integration, E2E) that would "
+                "benefit from reusable on-demand commands."
+            ),
+            code_snippet="""\
+# No .claude/commands/ directory found
+
+# The project has these complex workflows with no command shortcuts:
+# - Docker build + ECR push + EKS deploy (5+ steps)
+# - Database migrations via Alembic
+# - Unit tests, integration tests (requires DB), E2E tests (requires all services)
+""",
+            language="bash",
+        ),
+        recommendation=Recommendation(
+            title="Add custom commands for deployment, testing, and database workflows",
+            description=(
+                "Custom commands under `.claude/commands/` let you invoke complex workflows "
+                "with a simple slash command (e.g., `/project:deploy`). They're loaded "
+                "on-demand, not on every turn like CLAUDE.md.\n\n"
+                "This is the right place for multi-step instructions that are too long for "
+                "CLAUDE.md but too important to leave undocumented."
+            ),
+            docs_url="https://docs.anthropic.com/en/docs/claude-code/slash-commands",
+        ),
+        suggested_fix=CodeSnippet(
+            description="Example custom commands for the three main workflows",
+            code_snippet="""\
+# .claude/commands/deploy.md
+---
+description: Build, push, and deploy the classifier to production
+---
+Deploy the ShopFlow classifier to production EKS:
+1. Build: `docker build -t shopflow-classifier .`
+2. Tag: `docker tag shopflow-classifier:latest 123456789.dkr.ecr...`
+3. Push: `docker push 123456789.dkr.ecr...`
+4. Deploy: `kubectl apply -f k8s/deployment.yaml`
+5. Verify: `kubectl rollout status deployment/shopflow-classifier`
+
+# .claude/commands/test.md
+---
+description: Run the full test suite (unit + integration + E2E)
+---
+Run tests in order:
+1. Unit: `pytest tests/unit -v --cov=src`
+2. Integration: start DB with `docker compose up -d postgres-test`, then
+   `pytest tests/integration -v --timeout=60`
+3. E2E: `docker compose up -d && pytest tests/e2e -v --timeout=120`
+""",
+            language="markdown",
+        ),
+        impact=Impact(
+            cost_reduction="low",
+            latency_reduction="low",
+            reliability_improvement="medium",
+            estimated_savings_detail=(
+                "On-demand commands keep complex workflows accessible without "
+                "bloating CLAUDE.md. Saves context tokens on every non-deployment turn."
+            ),
+        ),
+        confidence="medium",
+        effort="low",
+    ),
+    # -------------------------------------------------------------------------
+    # MCP Tool Definition Bloat
+    # -------------------------------------------------------------------------
+    Finding(
+        category=AnalyzerType.MCP_TOOL_BLOAT,
+        model="",
+        location=CodeLocation(file=_CLAUDE_SETTINGS, lines="1-25"),
+        current_state=CodeSnippet(
+            description=(
+                "3 MCP servers configured with no allowedTools filters. All tools from "
+                "each server load into context on every turn, even tools never referenced "
+                "in the project. The Linear MCP server has zero tool references in the "
+                "codebase, suggesting it may be unused."
+            ),
+            code_snippet="""\
+{
+  "mcpServers": {
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@anthropic-ai/github-mcp"],
+      "env": { "GITHUB_TOKEN": "..." }
+    },
+    "slack": {
+      "command": "npx",
+      "args": ["-y", "@anthropic-ai/slack-mcp"],
+      "env": { "SLACK_BOT_TOKEN": "...", "SLACK_TEAM_ID": "..." }
+    },
+    "linear": {
+      "command": "npx",
+      "args": ["-y", "linear-mcp-server"],
+      "env": { "LINEAR_API_KEY": "..." }
+    }
+  }
+}
+""",
+            language="json",
+        ),
+        recommendation=Recommendation(
+            title="Add allowedTools filters to scope MCP servers and remove unused Linear server",
+            description=(
+                "Each MCP server exposes its full tool set into Claude's context on every turn. "
+                "GitHub MCP has ~30 tools, Slack ~20, Linear ~15, totaling ~65 tool definitions "
+                "(~13,000 tokens) loaded every turn, most of which are never used.\n\n"
+                "Only 6 GitHub tools and 3 Slack tools are referenced in the codebase. The Linear "
+                "server has zero references. Consider removing it entirely.\n\n"
+                "Add `allowedTools` arrays to `.claude/settings.json` to scope each server to only "
+                "the tools you actually use. This reduces context size and improves tool selection accuracy."
+            ),
+            docs_url="https://docs.anthropic.com/en/docs/claude-code/mcp",
+        ),
+        suggested_fix=CodeSnippet(
+            description="Scoped MCP config with allowedTools filters and unused server removed",
+            code_snippet="""\
+{
+  "mcpServers": {
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@anthropic-ai/github-mcp"],
+      "env": { "GITHUB_TOKEN": "..." }
+    },
+    "slack": {
+      "command": "npx",
+      "args": ["-y", "@anthropic-ai/slack-mcp"],
+      "env": { "SLACK_BOT_TOKEN": "...", "SLACK_TEAM_ID": "..." }
+    }
+  },
+  "allowedTools": [
+    "mcp__github__create_issue",
+    "mcp__github__list_pulls",
+    "mcp__github__get_file",
+    "mcp__github__create_pull",
+    "mcp__github__search_code",
+    "mcp__github__get_repo",
+    "mcp__slack__post_message",
+    "mcp__slack__search_messages",
+    "mcp__slack__list_channels"
+  ]
+}
+""",
+            language="json",
+        ),
+        impact=Impact(
+            cost_reduction="medium",
+            latency_reduction="medium",
+            reliability_improvement="medium",
+            estimated_savings_detail=(
+                "Removes ~56 unused tool definitions from context (~11,200 tokens per turn). "
+                "Over a 30-turn session, that's ~336,000 fewer tokens. Fewer tools also means "
+                "more accurate tool selection."
             ),
         ),
         confidence="high",
