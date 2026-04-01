@@ -78,12 +78,12 @@ if [[ ! -d "$FRONTEND_DIR/node_modules" ]]; then
   )
 fi
 
-echo "Starting backend on http://localhost:8000"
+echo "Starting backend on http://localhost:8002"
 (
   cd "$BACKEND_DIR"
   # shellcheck disable=SC1091
   source "$VENV_DIR/bin/activate"
-  exec python -m uvicorn main:app --reload --port 8000
+  exec python -m uvicorn main:app --reload --port 8002
 ) &
 BACKEND_PID=$!
 

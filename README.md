@@ -28,7 +28,7 @@ Copy-paste this prompt into Claude Code, Cursor, or any AI coding agent:
 
 > Clone https://github.com/saharmor/claude-optimize, create a `.env` file from `.env.example`, run `./start-dev.sh`, and open the frontend URL in my browser.
 
-That's it — the agent will handle cloning, installing dependencies ([uv](https://docs.astral.sh/uv/getting-started/installation/), Python 3.11+, Node.js 20+), and starting both servers. If you're logged into Claude Code (`claude login`), scans use your existing subscription at no extra cost. See [Authentication & Billing](#authentication--billing) for details.
+That's it. The agent will handle cloning, installing dependencies ([uv](https://docs.astral.sh/uv/getting-started/installation/), Python 3.11+, Node.js 20+), and starting both servers. If you're logged into Claude Code (`claude login`), scans use your existing subscription at no extra cost. See [Authentication & Billing](#authentication--billing) for details.
 
 ### Authentication & Billing
 
@@ -36,20 +36,20 @@ Claude Optimize runs scans using the Claude Code CLI. You can authenticate in tw
 
 | Method | How to set up | Billing |
 |---|---|---|
-| **Claude Code subscription** (recommended) | Run `claude login` — no API key needed | Covered by your existing Max subscription |
+| **Claude Code subscription** (recommended) | Run `claude login`, no API key needed | Covered by your existing Max subscription |
 | **API key** | Add `ANTHROPIC_API_KEY=sk-ant-...` to `.env` | Billed to your Anthropic API account |
 
 The startup script auto-detects which method to use. If `ANTHROPIC_API_KEY` is set, it takes priority and **API usage will be charged to that key**. If no key is set, the CLI falls back to your Claude Code subscription.
 
 The start script creates a virtual environment, installs all dependencies, and starts:
-- Backend on `http://localhost:8000`
+- Backend on `http://localhost:8002`
 - Frontend on `http://localhost:5173`
 
 Then open `http://localhost:5173`, enter a local project path, and run a scan.
 
 ## Run via Claude Code
 
-Skip the web UI entirely — run the optimizer as a slash command in Claude Code from any project:
+Skip the web UI entirely and run the optimizer as a slash command in Claude Code from any project:
 
 ```bash
 # One-time setup: copy the command to your global Claude commands
@@ -63,7 +63,7 @@ Then open Claude Code in any project and run:
 /user:optimize
 ```
 
-This will analyze your Claude API usage across 6 categories, apply high-confidence fixes directly to your code, and generate an `OPTIMIZE_REPORT.md` summarizing what changed and why.
+This will analyze your Claude API usage across 8 categories, apply high-confidence fixes directly to your code, and generate an `OPTIMIZE_REPORT.md` summarizing what changed and why.
 
 To get a report without applying any changes:
 
@@ -84,14 +84,15 @@ That path is wired as a fast preview so you can see the report without waiting o
 ## Configuration
 
 ```bash
-ANTHROPIC_API_KEY=                          # optional — see Authentication & Billing above
-CLAUDE_OPTIMIZE_MODEL=sonnet
+ANTHROPIC_API_KEY=                          # optional, see Authentication & Billing above
+CLAUDE_OPTIMIZE_MODEL=opus
 CLAUDE_OPTIMIZE_MAX_TURNS=12
 CLAUDE_OPTIMIZE_MAX_CONCURRENT_SCANS=2
 CLAUDE_OPTIMIZE_SCAN_TTL_SECONDS=3600
 CLAUDE_OPTIMIZE_SKIP_PERMISSIONS=false
 CLAUDE_OPTIMIZE_ALLOWED_PATHS=
 CLAUDE_OPTIMIZE_CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
+CLAUDE_OPTIMIZE_SHOW_GITHUB_CLONE=false
 ```
 
 - Local scans are restricted to allowed roots for safety
