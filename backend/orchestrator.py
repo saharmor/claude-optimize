@@ -7,27 +7,33 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-from analyzers import ANALYZER_PROMPTS
+from analyzers import API_ANALYZER_PROMPTS, AGENTIC_ANALYZER_PROMPTS
 from claude_runner import run_analyzer, run_project_summary
 from detect_claude_usage import has_claude_usage
 from demo_findings import DEMO_FINDINGS as SAMPLE_PROJECT_FINDINGS
-from models import AnalyzerStatus, AnalyzerType, Finding
+from models import AnalyzerStatus, AnalyzerType, ANALYZER_GROUPS, AnalyzerGroup, Finding
 from project_summary import DEMO_PROJECT_SUMMARY, build_project_summary_prompt
 from report_builder import build_report
 from settings import get_int_env
 from store import store
+
+API_ANALYZERS = set(ANALYZER_GROUPS[AnalyzerGroup.API])
 
 _SAMPLE_PROJECT_PATH = (Path(__file__).resolve().parent.parent / "sample_project").resolve()
 
 # Staggered delays (seconds) for each analyzer in sample project mode so the UI shows
 # realistic incremental progress. Total wall-clock time stays under 20 s.
 _SAMPLE_PROJECT_DELAYS: dict[AnalyzerType, float] = {
+    # API analyzers
     AnalyzerType.PROMPT_ENGINEERING: 3.0,
     AnalyzerType.PROMPT_CACHING: 6.0,
     AnalyzerType.BATCHING: 10.0,
     AnalyzerType.TOOL_USE: 13.0,
     AnalyzerType.STRUCTURED_OUTPUTS: 16.0,
     AnalyzerType.MODEL_UPGRADE: 4.0,
+    # Agentic analyzers
+    AnalyzerType.CLAUDE_MD_BLOAT: 5.0,
+    AnalyzerType.MCP_TOOL_BLOAT: 8.0,
 }
 
 _SAMPLE_PROJECT_FINDINGS_BY_TYPE: dict[AnalyzerType, list[Finding]] = {}
@@ -43,42 +49,51 @@ SCAN_SEMAPHORE = asyncio.Semaphore(MAX_CONCURRENT_SCANS)
 
 
 async def run_scan(scan_id: str, project_path: str) -> None:
-    """Run all analyzers in parallel and aggregate results."""
+    """Run all analyzers in parallel and aggregate results.
 
-    # --- Pre-check: does the project use the Claude API at all? ---
-    if not await asyncio.to_thread(has_claude_usage, project_path):
-        await asyncio.sleep(5)
+    API analyzers are gated by has_claude_usage(). If the project doesn't use the
+    Claude API, they are skipped. Agentic analyzers always run regardless, since
+    even the absence of agentic config (e.g. missing CLAUDE.md) is a finding.
+    """
+
+    has_api_usage = await asyncio.to_thread(has_claude_usage, project_path)
+
+    # Mark API analyzers as skipped if no Claude API usage detected
+    if not has_api_usage:
         scan = store.get(scan_id)
         if scan:
-            scan.status = "completed"
             scan.no_claude_usage = True
-            scan.completed_at = datetime.now(timezone.utc)
-            scan.project_summary_status = AnalyzerStatus.COMPLETED
-            for a in AnalyzerType:
+            for a in API_ANALYZERS:
                 scan.analyzer_statuses[a] = AnalyzerStatus.COMPLETED
-        store.notify(scan_id, {
-            "event": "scan_complete",
-            "data": {
-                "scan_id": scan_id,
-                "status": "completed",
-                "no_claude_usage": True,
-                "total_findings": 0,
-                "error": None,
-            },
-        })
-        _notify_stream_complete_if_ready(scan_id)
-        return
-
-    summary_task = asyncio.create_task(_run_project_summary(scan_id, project_path))
+                scan.analyzer_notes[a] = "Skipped: no Claude API usage detected"
+                store.notify(scan_id, {
+                    "event": "analyzer_complete",
+                    "data": {
+                        "analyzer": a.value,
+                        "finding_count": 0,
+                        "note": "Skipped: no Claude API usage detected",
+                    },
+                })
 
     try:
         async with SCAN_SEMAPHORE:
+            summary_task = asyncio.create_task(_run_project_summary(scan_id, project_path))
             tasks = {}
-            for analyzer_type, prompt_builder in ANALYZER_PROMPTS.items():
+
+            # Always run agentic analyzers
+            for analyzer_type, prompt_builder in AGENTIC_ANALYZER_PROMPTS.items():
                 prompt = prompt_builder()
                 tasks[analyzer_type] = asyncio.create_task(
                     _run_single_analyzer(scan_id, analyzer_type, prompt, project_path)
                 )
+
+            # Only run API analyzers if Claude API usage was detected
+            if has_api_usage:
+                for analyzer_type, prompt_builder in API_ANALYZER_PROMPTS.items():
+                    prompt = prompt_builder()
+                    tasks[analyzer_type] = asyncio.create_task(
+                        _run_single_analyzer(scan_id, analyzer_type, prompt, project_path)
+                    )
 
             results = await asyncio.gather(*tasks.values(), return_exceptions=True)
 

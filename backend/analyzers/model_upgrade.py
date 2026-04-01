@@ -19,7 +19,7 @@ WHAT TO LOOK FOR:
 
 Use the "Upgrade Map", "Breaking Changes", and "Deprecated Beta Headers" sections from the
 MODEL REGISTRY (provided in the base prompt) as your authoritative reference for all upgrade
-paths and breaking changes. Do not hardcode model mappings — always defer to the registry.
+paths and breaking changes. Do not hardcode model mappings. Always defer to the registry.
 
 EFFORT CALIBRATION:
 If the finding involves upgrading to Sonnet 4.6 and the code uses assistant prefills, extended
@@ -28,13 +28,13 @@ since the migration requires more than a string swap. Otherwise keep effort "low
 
 IMPACT ESTIMATION:
 - cost_reduction: "low" (same price tier, no direct cost savings)
-- latency_reduction: "medium" (newer models are generally faster — but warn about Sonnet 4.6's
+- latency_reduction: "medium" (newer models are generally faster, but warn about Sonnet 4.6's
   default high effort potentially increasing latency if not configured)
 - reliability_improvement: "medium" (better instruction following, fewer retries needed)
 
 WHEN TO RECOMMEND:
 - Any time you find an older model identifier that has a newer replacement.
-- Even if the code works fine, upgrading is a free win — better results at no extra cost.
+- Even if the code works fine, upgrading is a free win: better results at no extra cost.
 - Set confidence to "high" since model upgrades are straightforward.
 - Always include relevant breaking changes in the recommendation description so the user
   knows exactly what else needs to change beyond the model string.

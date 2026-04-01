@@ -7,13 +7,38 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 
+class AnalyzerGroup(str, Enum):
+    API = "api"
+    AGENTIC = "agentic"
+
+
 class AnalyzerType(str, Enum):
+    # API analyzers
     PROMPT_ENGINEERING = "prompt_engineering"
     PROMPT_CACHING = "prompt_caching"
     BATCHING = "batching"
     TOOL_USE = "tool_use"
     STRUCTURED_OUTPUTS = "structured_outputs"
     MODEL_UPGRADE = "model_upgrade"
+    # Agentic analyzers
+    CLAUDE_MD_BLOAT = "claude_md_bloat"
+    MCP_TOOL_BLOAT = "mcp_tool_bloat"
+
+
+ANALYZER_GROUPS: dict[AnalyzerGroup, list[AnalyzerType]] = {
+    AnalyzerGroup.API: [
+        AnalyzerType.PROMPT_ENGINEERING,
+        AnalyzerType.PROMPT_CACHING,
+        AnalyzerType.BATCHING,
+        AnalyzerType.TOOL_USE,
+        AnalyzerType.STRUCTURED_OUTPUTS,
+        AnalyzerType.MODEL_UPGRADE,
+    ],
+    AnalyzerGroup.AGENTIC: [
+        AnalyzerType.CLAUDE_MD_BLOAT,
+        AnalyzerType.MCP_TOOL_BLOAT,
+    ],
+}
 
 
 class AnalyzerStatus(str, Enum):
@@ -86,6 +111,11 @@ class Scorecard(BaseModel):
 
 
 # --- Scan request / result ---
+
+class CloneRequest(BaseModel):
+    github_url: str
+    destination: str
+
 
 class ScanRequest(BaseModel):
     project_path: str

@@ -48,7 +48,7 @@ INSTRUCTIONS:
 1. Start by locating likely integration files, prioritizing Python, TypeScript, JavaScript, TSX/JSX, Go, Java, Ruby, and Rust source files plus config files.
 2. Focus your turns on files that reference Anthropic, Claude, prompts, messages.create, tool definitions, JSON parsing, retry logic, or batching patterns.
 3. Read only the files needed to understand the real implementation. Avoid spending turns on unrelated UI, assets, tests, vendored code, virtual environments, or node_modules.
-4. **For each API call you analyze, identify which Claude model it uses.** Look for the `model` parameter in API calls (e.g., `model="claude-sonnet-4-6"`), configuration variables, environment variables, or constants that set the model. A single project may use different models for different tasks — track each one separately.
+4. **For each API call you analyze, identify which Claude model it uses.** Look for the `model` parameter in API calls (e.g., `model="claude-sonnet-4-6"`), configuration variables, environment variables, or constants that set the model. A single project may use different models for different tasks, so track each one separately.
 5. Identify specific optimization opportunities related to {category}.
 6. For each finding, include the EXACT code from the repo and provide a concrete, working fix adapted to that codebase.
 7. Prefer a small number of high-confidence findings over a long list of speculative ones.
