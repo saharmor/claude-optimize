@@ -1,4 +1,4 @@
-from analyzers.base import build_base_prompt
+from analyzers.base import build_agentic_base_prompt
 
 ANALYSIS_INSTRUCTIONS = """\
 WHAT TO LOOK FOR:
@@ -73,4 +73,4 @@ DOCS REFERENCES:
 
 
 def build_prompt() -> str:
-    return build_base_prompt("mcp_tool_bloat", ANALYSIS_INSTRUCTIONS)
+    return build_agentic_base_prompt("mcp_tool_bloat", ANALYSIS_INSTRUCTIONS)

@@ -1,4 +1,4 @@
-from analyzers.base import build_base_prompt
+from analyzers.base import build_agentic_base_prompt
 
 ANALYSIS_INSTRUCTIONS = """\
 WHAT TO LOOK FOR:
@@ -46,7 +46,8 @@ Flag if 3 or more of these sections are missing. Suggest additions specific to t
 If CLAUDE.md is over ~1,500 tokens (~6,000 characters), it's too large. Every token is
 repeated on every Claude Code turn.
 - Identify sections >500 tokens covering specific workflows (deployment, testing, CI/CD,
-  database migrations) that should be extracted to `.claude/commands/` files.
+  database migrations) that should be extracted to `.claude/commands/` files (loaded
+  on-demand) or `.claude/skills/` (loaded when triggered).
 - Flag duplicate instructions (same concept stated multiple ways).
 - Flag verbose prose that could be terse bullet points.
 - Calculate savings: (current_tokens - optimized_tokens) x 30 turns per session.
@@ -54,14 +55,6 @@ repeated on every Claude Code turn.
 **ISSUE E: Stale references**
 Check if file paths, directory names, or tool names mentioned in CLAUDE.md actually exist
 in the project. Flag references to files or directories that don't exist.
-
-**ISSUE F: No custom commands**
-Check if `.claude/commands/` directory exists. If the project has complex workflows (build
-pipelines, deployment steps, testing procedures, database migrations), these should be
-defined as on-demand commands rather than crammed into CLAUDE.md or left undocumented.
-This is a separate finding from CLAUDE.md content issues.
-- Only flag this if the project is non-trivial (has a build system, tests, or deployment).
-- Suggest 2-3 specific commands based on the project's actual workflows.
 
 ---
 
@@ -83,21 +76,19 @@ IMPACT ESTIMATION:
 - Missing/Stub (Issues A, B): cost_reduction "low", latency_reduction "low", reliability_improvement "high"
 - Missing sections (Issue C): cost_reduction "low", latency_reduction "low", reliability_improvement "medium"
 - Stale references (Issue E): cost_reduction "low", latency_reduction "low", reliability_improvement "medium"
-- No custom commands (Issue F): cost_reduction "low", latency_reduction "low", reliability_improvement "medium"
 
 CONFIDENCE:
 - "high" for Issues A, B, D (objectively measurable: file exists? token count?)
-- "medium" for Issues C, E, F (requires judgment about project complexity)
+- "medium" for Issues C, E (requires judgment about project complexity)
 
 WHEN NOT TO FLAG:
-- If CLAUDE.md is 100-1,500 tokens, well-structured, covers key sections, has no stale
-  references, AND the project is simple enough to not need custom commands: return [].
+- If CLAUDE.md is 100-1,500 tokens, well-structured, covers key sections, and has no stale
+  references: return [].
 
 DOCS REFERENCES:
 - CLAUDE.md overview: https://docs.anthropic.com/en/docs/claude-code/memory
-- Custom slash commands: https://docs.anthropic.com/en/docs/claude-code/slash-commands
 """
 
 
 def build_prompt() -> str:
-    return build_base_prompt("claude_md_bloat", ANALYSIS_INSTRUCTIONS)
+    return build_agentic_base_prompt("claude_md_bloat", ANALYSIS_INSTRUCTIONS)

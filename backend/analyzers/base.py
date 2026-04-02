@@ -4,6 +4,41 @@ from model_registry import get_full_registry
 
 _MODEL_REGISTRY = get_full_registry()
 
+AGENTIC_FINDING_SCHEMA = """\
+Each finding must be a JSON object with this exact structure:
+{
+  "category": "<CATEGORY>",
+  "model": "",
+  "location": {
+    "file": "relative/path/to/file (or project root if file is missing)",
+    "lines": "",
+    "function": ""
+  },
+  "current_state": {
+    "description": "Plain-English description of the current configuration and why it's suboptimal.",
+    "code_snippet": "The actual config content, or a note that the file/config is missing.",
+    "language": "markdown"
+  },
+  "recommendation": {
+    "title": "Short actionable title (e.g. 'Create .claudeignore to exclude build artifacts')",
+    "description": "Detailed explanation of what to do and why. Be educational. Explain the Claude Code feature being leveraged.",
+    "docs_url": "https://docs.anthropic.com/en/docs/..."
+  },
+  "suggested_fix": {
+    "description": "Brief description of what the fix changes.",
+    "code_snippet": "The ready-to-use config or file content with the fix applied.",
+    "language": "markdown"
+  },
+  "impact": {
+    "cost_reduction": "high | medium | low",
+    "latency_reduction": "high | medium | low",
+    "reliability_improvement": "high | medium | low",
+    "estimated_savings_detail": "One plain-English sentence describing the practical impact. Focus on the percentage or qualitative improvement, not raw token counts or per-MTok math."
+  },
+  "confidence": "high | medium | low",
+  "effort": "low | medium | high"
+}"""
+
 FINDING_SCHEMA = """\
 Each finding must be a JSON object with this exact structure:
 {
@@ -89,4 +124,51 @@ IMPORTANT:
 - Consolidate closely related issues that share the same root cause instead of emitting many small overlapping findings.
 - Avoid recommending a weaker workaround when a stronger Claude-native feature is a better fit; prefer the highest-leverage primary fix.
 - Keep impact estimates concise and human-readable. One sentence, no token math or per-MTok pricing breakdowns.
+"""
+
+
+def build_agentic_base_prompt(category: str, analysis_instructions: str) -> str:
+    """Build a prompt for agentic analyzers that examine Claude Code configuration.
+
+    Unlike the API base prompt, this omits the model registry and API-specific
+    analysis instructions, since agentic analyzers examine config files, not API calls.
+    """
+    return f"""\
+You are an expert analyzer for the Claude Optimize tool. Your task is to analyze a project's Claude Code configuration and setup for optimization opportunities related to: {category}.
+
+INSTRUCTIONS:
+1. Locate and read the relevant configuration files for this analysis. Check .claude/ directory, CLAUDE.md, .claudeignore, and any other project files referenced in the analysis instructions below.
+2. Examine the project structure to understand the tech stack, workflows, and complexity. This context helps you make project-specific recommendations.
+3. Identify specific optimization opportunities related to {category}.
+4. For each finding, include the ACTUAL content from the repo and provide a concrete, ready-to-use fix tailored to this specific project.
+5. Prefer a small number of high-confidence findings over a long list of speculative ones.
+
+WRITING IMPACT ESTIMATES:
+- Keep estimated_savings_detail to ONE short, readable sentence.
+- Lead with the practical benefit: percentage saved, retries eliminated, latency cut, reliability improved.
+- Do NOT include raw token counts, per-MTok pricing breakdowns, or multi-step arithmetic.
+- Good examples: "Reduces per-turn context by ~40%, improving response quality and cutting costs." / "Prevents accidental destructive commands, eliminating a class of irreversible mistakes."
+- Bad examples: "saves ~18,000 input tokens (~$0.054 at $3/MTok input)"
+
+{analysis_instructions}
+
+OUTPUT FORMAT:
+Return ONLY a valid JSON array of findings. No markdown fences. No explanatory text before or after.
+Each element must match this schema:
+
+{AGENTIC_FINDING_SCHEMA}
+
+Set "category" to "{category}" for all findings.
+Set "model" to "" for all findings.
+
+If you find no issues related to {category}, return an empty array: []
+
+IMPORTANT:
+- Only flag real issues you can see in the project. Do not speculate.
+- Include actual content from the files, not placeholders.
+- Every suggested_fix must be ready to use, tailored to this specific project.
+- Be educational in recommendation descriptions. Explain the Claude Code feature and why it helps.
+- If there are multiple possible fixes, choose the simplest, safest one aligned with Anthropic best practices.
+- Consolidate closely related issues that share the same root cause instead of emitting many small overlapping findings.
+- Keep impact estimates concise and human-readable. One sentence, no token math.
 """
