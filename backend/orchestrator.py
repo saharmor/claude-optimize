@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
+from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -19,6 +21,19 @@ from store import store
 
 API_ANALYZERS = set(ANALYZER_GROUPS[AnalyzerGroup.API])
 
+
+def _build_prompt(prompt_builder: Callable[..., str], project_path: str) -> str:
+    """Call a prompt builder, passing project_path if it accepts it.
+
+    Some prompt builders (e.g. skills_from_history) need the project path to
+    read external data. This helper inspects the builder's signature and passes
+    project_path only when the builder declares it as a parameter.
+    """
+    sig = inspect.signature(prompt_builder)
+    if "project_path" in sig.parameters:
+        return prompt_builder(project_path=project_path)
+    return prompt_builder()
+
 _SAMPLE_PROJECT_PATH = (Path(__file__).resolve().parent.parent / "sample_project").resolve()
 
 # Staggered delays (seconds) for each analyzer in sample project mode so the UI shows
@@ -34,6 +49,12 @@ _SAMPLE_PROJECT_DELAYS: dict[AnalyzerType, float] = {
     # Agentic analyzers
     AnalyzerType.CLAUDE_MD_BLOAT: 5.0,
     AnalyzerType.MCP_TOOL_BLOAT: 8.0,
+    AnalyzerType.CLAUDEIGNORE_QUALITY: 4.0,
+    AnalyzerType.COMMANDS_QUALITY: 7.0,
+    AnalyzerType.SETTINGS_PERMISSIONS: 9.0,
+    AnalyzerType.SKILLS_QUALITY: 11.0,
+    AnalyzerType.CONTEXT_BUDGET: 14.0,
+    AnalyzerType.SKILLS_FROM_HISTORY: 12.0,
 }
 
 _SAMPLE_PROJECT_FINDINGS_BY_TYPE: dict[AnalyzerType, list[Finding]] = {}
@@ -82,17 +103,15 @@ async def run_scan(scan_id: str, project_path: str) -> None:
 
             # Always run agentic analyzers
             for analyzer_type, prompt_builder in AGENTIC_ANALYZER_PROMPTS.items():
-                prompt = prompt_builder()
                 tasks[analyzer_type] = asyncio.create_task(
-                    _run_single_analyzer(scan_id, analyzer_type, prompt, project_path)
+                    _run_single_analyzer(scan_id, analyzer_type, prompt_builder, project_path)
                 )
 
             # Only run API analyzers if Claude API usage was detected
             if has_api_usage:
                 for analyzer_type, prompt_builder in API_ANALYZER_PROMPTS.items():
-                    prompt = prompt_builder()
                     tasks[analyzer_type] = asyncio.create_task(
-                        _run_single_analyzer(scan_id, analyzer_type, prompt, project_path)
+                        _run_single_analyzer(scan_id, analyzer_type, prompt_builder, project_path)
                     )
 
             results = await asyncio.gather(*tasks.values(), return_exceptions=True)
@@ -227,13 +246,19 @@ async def _run_sample_project_analyzer(
 async def _run_single_analyzer(
     scan_id: str,
     analyzer_type: AnalyzerType,
-    prompt: str,
+    prompt_builder: Callable[..., str],
     project_path: str,
 ) -> list[Finding]:
-    """Run a single analyzer and update its status in the store."""
+    """Build the prompt and run a single analyzer, updating status in the store.
+
+    Prompt building happens inside the task so that (a) I/O-heavy builders
+    (e.g. skills_from_history) don't block the event loop, and (b) a failure
+    in one builder doesn't prevent other analyzers from starting.
+    """
     store.update_analyzer_status(scan_id, analyzer_type, AnalyzerStatus.RUNNING)
 
     try:
+        prompt = await asyncio.to_thread(_build_prompt, prompt_builder, project_path)
         findings, note = await run_analyzer(prompt, project_path)
         _store_analyzer_findings(scan_id, findings)
         if note:

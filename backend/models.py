@@ -23,6 +23,12 @@ class AnalyzerType(str, Enum):
     # Agentic analyzers
     CLAUDE_MD_BLOAT = "claude_md_bloat"
     MCP_TOOL_BLOAT = "mcp_tool_bloat"
+    CLAUDEIGNORE_QUALITY = "claudeignore_quality"
+    COMMANDS_QUALITY = "commands_quality"
+    SETTINGS_PERMISSIONS = "settings_permissions"
+    SKILLS_QUALITY = "skills_quality"
+    CONTEXT_BUDGET = "context_budget"
+    SKILLS_FROM_HISTORY = "skills_from_history"
 
 
 ANALYZER_GROUPS: dict[AnalyzerGroup, list[AnalyzerType]] = {
@@ -37,6 +43,12 @@ ANALYZER_GROUPS: dict[AnalyzerGroup, list[AnalyzerType]] = {
     AnalyzerGroup.AGENTIC: [
         AnalyzerType.CLAUDE_MD_BLOAT,
         AnalyzerType.MCP_TOOL_BLOAT,
+        AnalyzerType.CLAUDEIGNORE_QUALITY,
+        AnalyzerType.COMMANDS_QUALITY,
+        AnalyzerType.SETTINGS_PERMISSIONS,
+        AnalyzerType.SKILLS_QUALITY,
+        AnalyzerType.CONTEXT_BUDGET,
+        AnalyzerType.SKILLS_FROM_HISTORY,
     ],
 }
 
@@ -149,6 +161,7 @@ class ScanResult(BaseModel):
 class ApplyRequest(BaseModel):
     prompt: str = Field(..., max_length=100_000)
     project_path: str
+    finding_titles: list[str] = Field(default_factory=list)
 
 
 class ApplyResult(BaseModel):
@@ -160,6 +173,7 @@ class ApplyResult(BaseModel):
     error: str | None = None
     pr_url: str | None = None
     pr_error: str | None = None
+    pr_branch: str | None = None
 
 
 class RecentProject(BaseModel):

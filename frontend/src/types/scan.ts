@@ -6,7 +6,13 @@ export type AnalyzerType =
   | "structured_outputs"
   | "model_upgrade"
   | "claude_md_bloat"
-  | "mcp_tool_bloat";
+  | "mcp_tool_bloat"
+  | "claudeignore_quality"
+  | "commands_quality"
+  | "settings_permissions"
+  | "skills_quality"
+  | "context_budget"
+  | "skills_from_history";
 
 export type AnalyzerGroup = "api" | "agentic";
 export type AnalyzerStatus = "pending" | "running" | "completed" | "failed";
@@ -25,6 +31,12 @@ export const API_ANALYZERS: AnalyzerType[] = [
 export const AGENTIC_ANALYZERS: AnalyzerType[] = [
   "claude_md_bloat",
   "mcp_tool_bloat",
+  "claudeignore_quality",
+  "commands_quality",
+  "settings_permissions",
+  "skills_quality",
+  "context_budget",
+  "skills_from_history",
 ];
 
 export const ALL_ANALYZERS: AnalyzerType[] = [
@@ -122,6 +134,7 @@ export interface ApplyResult {
   error: string | null;
   pr_url: string | null;
   pr_error: string | null;
+  pr_branch: string | null;
 }
 
 export const ANALYZER_LABELS: Record<AnalyzerType, string> = {
@@ -133,6 +146,12 @@ export const ANALYZER_LABELS: Record<AnalyzerType, string> = {
   model_upgrade: "Model Upgrade",
   claude_md_bloat: "CLAUDE.md Context Bloat",
   mcp_tool_bloat: "MCP Tool Bloat",
+  claudeignore_quality: "Context Exclusion",
+  commands_quality: "Custom Commands",
+  settings_permissions: "Settings & Permissions",
+  skills_quality: "Skills Configuration",
+  context_budget: "Context Budget",
+  skills_from_history: "Skills from Chat History",
 };
 
 export const ANALYZER_GROUP_LABELS: Record<AnalyzerGroup, string> = {
