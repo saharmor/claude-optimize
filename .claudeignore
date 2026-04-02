@@ -1,0 +1,16 @@
+# Dependencies
+node_modules/
+.venv/
+
+# Build output
+frontend/dist/
+
+# Python bytecode
+__pycache__/
+*.pyc
+
+# Lockfile (4500+ lines, not useful for code understanding)
+package-lock.json
+
+# OS / editor
+.DS_Store
