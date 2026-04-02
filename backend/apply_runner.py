@@ -2,14 +2,61 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import random
 from datetime import datetime, timezone
+from pathlib import Path
+from typing import Callable
 
 from claude_runner import run_apply
+from git_pr import create_pull_request, get_changed_files, snapshot_changed_files
 from store import apply_store
 
 logger = logging.getLogger(__name__)
 
 APPLY_SEMAPHORE = asyncio.Semaphore(1)
+
+_SAMPLE_PROJECT_PATH = (Path(__file__).resolve().parent.parent / "sample_project").resolve()
+
+
+def _is_sample_project(project_path: str) -> bool:
+    try:
+        return Path(project_path).resolve() == _SAMPLE_PROJECT_PATH
+    except OSError:
+        return False
+
+
+async def _mock_apply(on_output: Callable[[str], None]) -> None:
+    """Simulate a realistic Claude Code apply session without touching any files."""
+    steps = [
+        (0.4, "Reading project structure..."),
+        (0.6, ""),
+        (0.8, "Identified files to modify:"),
+        (0.3, "  - src/api/client.ts"),
+        (0.2, "  - src/services/claude.py"),
+        (0.2, "  - src/utils/prompt.ts"),
+        (0.7, ""),
+        (1.0, "Applying prompt caching optimizations..."),
+        (0.5, "  Adding cache_control headers to system prompts"),
+        (0.8, "  Restructuring message array for cache efficiency"),
+        (0.4, ""),
+        (1.2, "Applying batching improvements..."),
+        (0.5, "  Converting sequential API calls to batch requests"),
+        (0.6, "  Added batch result aggregation"),
+        (0.4, ""),
+        (0.9, "Applying model selection optimizations..."),
+        (0.5, "  Switching classification tasks to Haiku"),
+        (0.4, "  Keeping complex reasoning on Sonnet"),
+        (0.4, ""),
+        (0.8, "Running validation checks..."),
+        (0.6, "  All type checks passed"),
+        (0.4, "  No breaking changes detected"),
+        (0.5, ""),
+        (0.3, "Done. Applied optimizations to 3 files."),
+    ]
+
+    for delay, line in steps:
+        await asyncio.sleep(delay + random.uniform(-0.1, 0.15))
+        on_output(line)
 
 
 async def run_apply_job(apply_id: str, prompt: str, project_path: str) -> None:
@@ -28,7 +75,50 @@ async def run_apply_job(apply_id: str, prompt: str, project_path: str) -> None:
                     "data": {"line": line},
                 })
 
-            await run_apply(prompt, project_path, on_output=on_output)
+            is_sample = _is_sample_project(project_path)
+
+            # Snapshot dirty files BEFORE the apply so we can diff afterward
+            files_before: set[str] = set()
+            if not is_sample:
+                files_before = await snapshot_changed_files(project_path)
+
+            if is_sample:
+                await _mock_apply(on_output)
+            else:
+                await run_apply(prompt, project_path, on_output=on_output)
+
+            # Attempt to create a PR (skip for sample project)
+            if not is_sample:
+                changed_files = await get_changed_files(project_path, files_before)
+
+                apply_store.notify(apply_id, {
+                    "event": "creating_pr",
+                    "data": {"apply_id": apply_id},
+                })
+                on_output("")
+                on_output("Creating pull request...")
+
+                branch_name = f"claude-optimize/{apply_id}"
+                pr_title = "Claude Optimize: Apply optimizations"
+                pr_body = "Optimizations applied by [Claude Optimize](https://github.com/anthropics/claude-optimize)."
+
+                try:
+                    url = await create_pull_request(
+                        project_path, branch_name, pr_title, pr_body,
+                        changed_files=changed_files, on_output=on_output,
+                    )
+                    apply_store.update(apply_id, pr_url=url)
+                    apply_store.notify(apply_id, {
+                        "event": "pr_created",
+                        "data": {"apply_id": apply_id, "pr_url": url},
+                    })
+                except Exception as pr_exc:
+                    logger.warning("PR creation failed for %s: %s", apply_id, pr_exc)
+                    apply_store.update(apply_id, pr_error=str(pr_exc))
+                    apply_store.notify(apply_id, {
+                        "event": "pr_failed",
+                        "data": {"apply_id": apply_id, "error": str(pr_exc)},
+                    })
 
             apply_store.update(
                 apply_id,

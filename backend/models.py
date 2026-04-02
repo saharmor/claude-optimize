@@ -158,6 +158,8 @@ class ApplyResult(BaseModel):
     started_at: datetime | None = None
     completed_at: datetime | None = None
     error: str | None = None
+    pr_url: str | None = None
+    pr_error: str | None = None
 
 
 class RecentProject(BaseModel):
