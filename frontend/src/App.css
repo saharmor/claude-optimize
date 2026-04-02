@@ -439,6 +439,12 @@ select {
   gap: 0.85rem;
 }
 
+[role="tabpanel"] {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
 .form-group {
   display: flex;
   flex-direction: column;
@@ -557,6 +563,16 @@ select {
 .project-input-text-action:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+.options-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 1.5rem 0;
+  color: var(--muted-foreground);
+  font-size: 0.9rem;
 }
 
 .input-method-tabs {

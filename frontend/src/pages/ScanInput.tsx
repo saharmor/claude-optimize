@@ -44,8 +44,10 @@ export default function ScanInput() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [showGithubClone, setShowGithubClone] = useState(false);
+  const [configLoading, setConfigLoading] = useState(true);
   const [githubUrl, setGithubUrl] = useState("");
   const [cloneDestination, setCloneDestination] = useState("");
+  const [cloneBaseDir, setCloneBaseDir] = useState("");
   const [cloning, setCloning] = useState(false);
 
   useEffect(() => {
@@ -56,6 +58,17 @@ export default function ScanInput() {
         const projects = await getRecentProjects();
         if (cancelled) return;
         setRecentProjects(projects);
+        if (projects.length > 0) {
+          const freq: Record<string, number> = {};
+          for (const p of projects) {
+            const lastSlash = p.path.lastIndexOf("/");
+            const dir = lastSlash >= 1 ? p.path.slice(0, lastSlash) : p.path;
+            freq[dir] = (freq[dir] ?? 0) + 1;
+          }
+          const baseDir = Object.entries(freq).sort((a, b) => b[1] - a[1])[0][0];
+          setCloneBaseDir(baseDir);
+          setCloneDestination(baseDir);
+        }
       } catch (err) {
         if (!cancelled) {
           setError(
@@ -77,6 +90,10 @@ export default function ScanInput() {
         }
       } catch {
         // Config fetch failed; keep defaults
+      } finally {
+        if (!cancelled) {
+          setConfigLoading(false);
+        }
       }
     };
 
@@ -94,6 +111,7 @@ export default function ScanInput() {
     [recentProjects, selectedProjectPath]
   );
   const hasRecentProjects = recentProjects.length > 0;
+  const optionsLoading = projectsLoading || configLoading;
 
   // Once projects load, if there are none, default to "path" tab
   useEffect(() => {
@@ -178,59 +196,59 @@ export default function ScanInput() {
               className="form-heading"
             />
 
-            {/* ── Tab bar ── */}
-            <div className="input-method-tabs" role="tablist">
-              {hasRecentProjects && (
-                <button
-                  type="button"
-                  id="tab-recent"
-                  role="tab"
-                  aria-selected={activeMethod === "recent"}
-                  aria-controls="panel-recent"
-                  className={`input-method-tab${activeMethod === "recent" ? " input-method-tab--active" : ""}`}
-                  onClick={() => handleTabChange("recent")}
-                  disabled={busy}
-                >
-                  <ClockIcon /> Recent project
-                </button>
-              )}
-              {showGithubClone && (
-                <button
-                  type="button"
-                  id="tab-clone"
-                  role="tab"
-                  aria-selected={activeMethod === "clone"}
-                  aria-controls="panel-clone"
-                  className={`input-method-tab${activeMethod === "clone" ? " input-method-tab--active" : ""}`}
-                  onClick={() => handleTabChange("clone")}
-                  disabled={busy}
-                >
-                  <GitHubIcon /> Clone
-                </button>
-              )}
-              <button
-                type="button"
-                id="tab-path"
-                role="tab"
-                aria-selected={activeMethod === "path"}
-                aria-controls="panel-path"
-                className={`input-method-tab${activeMethod === "path" ? " input-method-tab--active" : ""}`}
-                onClick={() => handleTabChange("path")}
-                disabled={busy}
-              >
-                <FolderIcon /> Enter path
-              </button>
-            </div>
+            {optionsLoading ? (
+              <div className="options-loading">
+                <span className="spinner" /> Loading options...
+              </div>
+            ) : (
+              <>
+                {/* ── Tab bar ── */}
+                <div className="input-method-tabs" role="tablist">
+                  {hasRecentProjects && (
+                    <button
+                      type="button"
+                      id="tab-recent"
+                      role="tab"
+                      aria-selected={activeMethod === "recent"}
+                      aria-controls="panel-recent"
+                      className={`input-method-tab${activeMethod === "recent" ? " input-method-tab--active" : ""}`}
+                      onClick={() => handleTabChange("recent")}
+                      disabled={busy}
+                    >
+                      <ClockIcon /> Recent project
+                    </button>
+                  )}
+                  {showGithubClone && (
+                    <button
+                      type="button"
+                      id="tab-clone"
+                      role="tab"
+                      aria-selected={activeMethod === "clone"}
+                      aria-controls="panel-clone"
+                      className={`input-method-tab${activeMethod === "clone" ? " input-method-tab--active" : ""}`}
+                      onClick={() => handleTabChange("clone")}
+                      disabled={busy}
+                    >
+                      <GitHubIcon /> Clone
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    id="tab-path"
+                    role="tab"
+                    aria-selected={activeMethod === "path"}
+                    aria-controls="panel-path"
+                    className={`input-method-tab${activeMethod === "path" ? " input-method-tab--active" : ""}`}
+                    onClick={() => handleTabChange("path")}
+                    disabled={busy}
+                  >
+                    <FolderIcon /> Enter path
+                  </button>
+                </div>
 
-            {/* ── Recent project panel ── */}
-            {activeMethod === "recent" && (
-              <div role="tabpanel" id="panel-recent" aria-labelledby="tab-recent">
-                {projectsLoading ? (
-                  <p className="form-footnote">
-                    Looking for recent local projects you worked on...
-                  </p>
-                ) : (
-                  <>
+                {/* ── Recent project panel ── */}
+                {activeMethod === "recent" && (
+                  <div role="tabpanel" id="panel-recent" aria-labelledby="tab-recent">
                     <div className="form-group">
                       <select
                         id="recent-project"
@@ -258,71 +276,80 @@ export default function ScanInput() {
                         </div>
                       </div>
                     )}
-                  </>
+                  </div>
                 )}
-              </div>
-            )}
 
-            {/* ── Clone panel ── */}
-            {activeMethod === "clone" && (
-              <div role="tabpanel" id="panel-clone" aria-labelledby="tab-clone">
-                <div className="form-group">
-                  <label htmlFor="github-url">GitHub URL</label>
-                  <input
-                    id="github-url"
-                    className="input-field"
-                    type="text"
-                    placeholder="https://github.com/owner/repo"
-                    value={githubUrl}
-                    onChange={(e) => setGithubUrl(e.target.value)}
-                    disabled={busy}
-                  />
-                </div>
+                {/* ── Clone panel ── */}
+                {activeMethod === "clone" && (
+                  <div role="tabpanel" id="panel-clone" aria-labelledby="tab-clone">
+                    <div className="form-group">
+                      <label htmlFor="github-url">GitHub URL</label>
+                      <input
+                        id="github-url"
+                        className="input-field"
+                        type="text"
+                        placeholder="https://github.com/owner/repo"
+                        value={githubUrl}
+                        onChange={(e) => {
+                          const url = e.target.value;
+                          setGithubUrl(url);
+                          const match = url.match(/github\.com\/[^/]+\/([^/]+?)(?:\.git)?\/?\s*$/);
+                          if (match && cloneBaseDir) {
+                            setCloneDestination(`${cloneBaseDir}/${match[1]}`);
+                          } else if (cloneBaseDir) {
+                            setCloneDestination(cloneBaseDir);
+                          }
+                        }}
+                        disabled={busy}
+                      />
+                    </div>
 
-                <div className="form-group">
-                  <label htmlFor="clone-destination">Clone destination</label>
-                  <input
-                    id="clone-destination"
-                    className="input-field"
-                    type="text"
-                    placeholder="/path/to/clone/into"
-                    value={cloneDestination}
-                    onChange={(e) => setCloneDestination(e.target.value)}
-                    disabled={busy}
-                  />
-                  <span className="hint">
-                    Absolute path where the repository will be cloned.
-                  </span>
-                </div>
-              </div>
-            )}
+                    <div className="form-group">
+                      <label htmlFor="clone-destination">Clone destination</label>
+                      <input
+                        id="clone-destination"
+                        className="input-field"
+                        type="text"
+                        placeholder="/path/to/clone/into"
+                        value={cloneDestination}
+                        onChange={(e) => setCloneDestination(e.target.value)}
+                        disabled={busy}
+                      />
+                      <span className="hint">
+                        Absolute path where the repository will be cloned.
+                      </span>
+                    </div>
+                  </div>
+                )}
 
-            {/* ── Enter path panel ── */}
-            {activeMethod === "path" && (
-              <div role="tabpanel" id="panel-path" aria-labelledby="tab-path">
-                <div className="form-group">
-                  <label htmlFor="project-path">Project path</label>
-                  <input
-                    id="project-path"
-                    className="input-field"
-                    type="text"
-                    placeholder="/path/to/your/claude-powered/project"
-                    value={projectPath}
-                    onChange={(e) => {
-                      const nextValue = e.target.value;
-                      setProjectPath(nextValue);
-                      if (selectedProjectPath && nextValue !== selectedProjectPath) {
-                        setSelectedProjectPath("");
-                      }
-                    }}
-                    disabled={busy}
-                  />
-                  <span className="hint">
-                    Absolute path to the project directory you want Claude Optimize
-                    to inspect.
-                  </span>
-                </div>
-              </div>
+                {/* ── Enter path panel ── */}
+                {activeMethod === "path" && (
+                  <div role="tabpanel" id="panel-path" aria-labelledby="tab-path">
+                    <div className="form-group">
+                      <label htmlFor="project-path">Project path</label>
+                      <input
+                        id="project-path"
+                        className="input-field"
+                        type="text"
+                        placeholder="/path/to/your/claude-powered/project"
+                        value={projectPath}
+                        onChange={(e) => {
+                          const nextValue = e.target.value;
+                          setProjectPath(nextValue);
+                          if (selectedProjectPath && nextValue !== selectedProjectPath) {
+                            setSelectedProjectPath("");
+                          }
+                        }}
+                        disabled={busy}
+                      />
+                      <span className="hint">
+                        Absolute path to the project directory you want Claude Optimize
+                        to inspect.
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
 
             {error && <div className="error-message">{error}</div>}
@@ -332,6 +359,7 @@ export default function ScanInput() {
                 type="submit"
                 variant="primary"
                 disabled={
+                  optionsLoading ||
                   busy ||
                   (activeMethod === "clone"
                     ? !githubUrl.trim() || !cloneDestination.trim()
