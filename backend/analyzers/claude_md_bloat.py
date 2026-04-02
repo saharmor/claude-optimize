@@ -72,6 +72,11 @@ REPORT STRUCTURE:
 - The "suggested_fix" code_snippet should show the improved content, tailored to the project.
   DO NOT use generic templates. Read the actual project files to understand the tech stack,
   structure, and conventions, then generate specific suggestions.
+- If the existing CLAUDE.md uses `@filename` includes (e.g., `@AGENTS.md`), and the
+  referenced file contains useful content, keep the include in the suggested fix BUT explain
+  what it does in the recommendation description (e.g., "`@AGENTS.md` is an include directive
+  that pulls in the referenced file's content"). If the include references a file that doesn't
+  exist or has no useful content, remove it from the suggestion.
 
 IMPACT ESTIMATION:
 - Bloat (Issue D): cost_reduction "high", latency_reduction "medium", reliability_improvement "medium"

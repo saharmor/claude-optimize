@@ -139,7 +139,7 @@ async def get_config():
     }
 
 
-_GITHUB_URL_RE = re.compile(r"^https://github\.com/[\w.\-]+/[\w.\-]+(\.git)?$")
+_GITHUB_URL_RE = re.compile(r"^https://github\.com/[\w.\-]+/[\w.\-]+(\.git)?/?$")
 
 
 @app.post("/api/clone")

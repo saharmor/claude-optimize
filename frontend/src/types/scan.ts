@@ -137,6 +137,6 @@ export const ANALYZER_LABELS: Record<AnalyzerType, string> = {
 
 export const ANALYZER_GROUP_LABELS: Record<AnalyzerGroup, string> = {
   api: "API Optimization",
-  agentic: "Agentic",
+  agentic: "Agentic SDK",
 };
 
