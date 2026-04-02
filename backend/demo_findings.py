@@ -600,77 +600,411 @@ Extracted to on-demand commands:
         effort="low",
     ),
     # -------------------------------------------------------------------------
-    # CLAUDE.md: No Custom Commands
+    # Claudeignore Quality
     # -------------------------------------------------------------------------
     Finding(
-        category=AnalyzerType.CLAUDE_MD_BLOAT,
+        category=AnalyzerType.CLAUDEIGNORE_QUALITY,
         model="",
         location=CodeLocation(file=".", lines=""),
         current_state=CodeSnippet(
             description=(
-                "No `.claude/commands/` directory exists. This project has deployment "
-                "workflows (Docker + AWS ECR + EKS), database migrations (Alembic), "
-                "and a multi-stage test pipeline (unit, integration, E2E) that would "
-                "benefit from reusable on-demand commands."
+                "No .claudeignore file exists. The project has __pycache__/ directories, "
+                "a .pytest_cache/ directory, and requirements.txt lockfile content that Claude "
+                "Code may read unnecessarily, adding noise to its context."
             ),
-            code_snippet="""\
-# No .claude/commands/ directory found
-
-# The project has these complex workflows with no command shortcuts:
-# - Docker build + ECR push + EKS deploy (5+ steps)
-# - Database migrations via Alembic
-# - Unit tests, integration tests (requires DB), E2E tests (requires all services)
-""",
+            code_snippet=(
+                "# No .claudeignore file found\n"
+                "#\n"
+                "# Directories that should be excluded:\n"
+                "# - __pycache__/ (Python bytecode cache)\n"
+                "# - .pytest_cache/ (test runner cache)\n"
+                "# - *.pyc (compiled Python files)\n"
+                "# - .venv/ or venv/ (if virtual environment exists)"
+            ),
             language="bash",
         ),
         recommendation=Recommendation(
-            title="Add custom commands for deployment, testing, and database workflows",
+            title="Create .claudeignore to exclude build artifacts and caches",
             description=(
-                "Custom commands under `.claude/commands/` let you invoke complex workflows "
-                "with a simple slash command (e.g., `/project:deploy`). They're loaded "
-                "on-demand, not on every turn like CLAUDE.md.\n\n"
-                "This is the right place for multi-step instructions that are too long for "
-                "CLAUDE.md but too important to leave undocumented."
+                "The .claudeignore file works like .gitignore: it tells Claude Code which files "
+                "to skip when reading the project. Without it, Claude may waste context on "
+                "bytecode caches, test artifacts, and other generated content that adds no value "
+                "to code analysis.\n\n"
+                "This is especially important as projects grow. A .claudeignore keeps Claude "
+                "focused on actual source code."
+            ),
+            docs_url="https://docs.anthropic.com/en/docs/claude-code/memory#claudeignore",
+        ),
+        suggested_fix=CodeSnippet(
+            description="A .claudeignore file tailored to this Python project",
+            code_snippet=(
+                "# Python\n"
+                "__pycache__/\n"
+                "*.pyc\n"
+                "*.pyo\n"
+                ".venv/\n"
+                "venv/\n"
+                "\n"
+                "# Test caches\n"
+                ".pytest_cache/\n"
+                "htmlcov/\n"
+                "coverage/\n"
+                "\n"
+                "# IDE\n"
+                ".idea/\n"
+                ".vscode/\n"
+                "\n"
+                "# OS\n"
+                ".DS_Store\n"
+                "Thumbs.db"
+            ),
+            language="gitignore",
+        ),
+        impact=Impact(
+            cost_reduction="medium",
+            latency_reduction="low",
+            reliability_improvement="medium",
+            estimated_savings_detail=(
+                "Prevents Claude from reading cache files and build artifacts, "
+                "reducing context noise and improving response relevance."
+            ),
+        ),
+        confidence="high",
+        effort="low",
+    ),
+    # -------------------------------------------------------------------------
+    # Custom Commands Quality
+    # -------------------------------------------------------------------------
+    Finding(
+        category=AnalyzerType.COMMANDS_QUALITY,
+        model="",
+        location=CodeLocation(file=".", lines=""),
+        current_state=CodeSnippet(
+            description=(
+                "No .claude/commands/ directory exists. The project has deployment workflows "
+                "(Docker + AWS), database migrations, and a multi-stage test pipeline that "
+                "are documented in CLAUDE.md but would be better as on-demand commands."
+            ),
+            code_snippet=(
+                "# No .claude/commands/ directory found\n"
+                "#\n"
+                "# Detected workflows that should be commands:\n"
+                "# 1. Deployment: Docker build + ECR push + EKS deploy (from CLAUDE.md)\n"
+                "# 2. Testing: unit + integration + E2E pipeline (from CLAUDE.md)\n"
+                "# 3. Database: Alembic migration workflow (from requirements.txt)"
+            ),
+            language="bash",
+        ),
+        recommendation=Recommendation(
+            title="Create custom commands for deployment and testing workflows",
+            description=(
+                "Custom commands under .claude/commands/ are loaded on-demand via "
+                "/project:<name>, not on every turn like CLAUDE.md. Moving the 800-token "
+                "deployment guide and 400-token testing instructions from CLAUDE.md to "
+                "commands would reduce per-turn context by ~1,200 tokens while keeping "
+                "these workflows easily accessible.\n\n"
+                "Commands also support $ARGUMENTS for parameterization, making them more "
+                "flexible than static CLAUDE.md content."
             ),
             docs_url="https://docs.anthropic.com/en/docs/claude-code/slash-commands",
         ),
         suggested_fix=CodeSnippet(
-            description="Example custom commands for the three main workflows",
-            code_snippet="""\
-# .claude/commands/deploy.md
----
-description: Build, push, and deploy the classifier to production
----
-Deploy the ShopFlow classifier to production EKS:
-1. Build: `docker build -t shopflow-classifier .`
-2. Tag: `docker tag shopflow-classifier:latest 123456789.dkr.ecr...`
-3. Push: `docker push 123456789.dkr.ecr...`
-4. Deploy: `kubectl apply -f k8s/deployment.yaml`
-5. Verify: `kubectl rollout status deployment/shopflow-classifier`
-
-# .claude/commands/test.md
----
-description: Run the full test suite (unit + integration + E2E)
----
-Run tests in order:
-1. Unit: `pytest tests/unit -v --cov=src`
-2. Integration: start DB with `docker compose up -d postgres-test`, then
-   `pytest tests/integration -v --timeout=60`
-3. E2E: `docker compose up -d && pytest tests/e2e -v --timeout=120`
-""",
+            description="Two custom commands extracted from CLAUDE.md workflow sections",
+            code_snippet=(
+                "# .claude/commands/deploy.md\n"
+                "---\n"
+                "description: Build, push, and deploy the classifier to production\n"
+                "---\n"
+                "Deploy the ShopFlow classifier. If $ARGUMENTS specifies an environment\n"
+                "(staging/production), deploy there. Otherwise default to staging.\n"
+                "\n"
+                "Steps:\n"
+                "1. Build: `docker build -t shopflow-classifier .`\n"
+                "2. Tag for ECR: `docker tag shopflow-classifier:latest ...`\n"
+                "3. Push: `docker push ...`\n"
+                "4. Deploy: `kubectl apply -f k8s/deployment.yaml`\n"
+                "5. Verify: `kubectl rollout status deployment/shopflow-classifier`\n"
+                "\n"
+                "# .claude/commands/test.md\n"
+                "---\n"
+                "description: Run tests. Pass a specific test path or run the full suite.\n"
+                "---\n"
+                "Run tests. If $ARGUMENTS is provided, run that specific test path.\n"
+                "Otherwise run the full pipeline:\n"
+                "\n"
+                "1. Unit: `pytest tests/unit -v --cov=src`\n"
+                "2. Integration: `docker compose up -d postgres-test &&\n"
+                "   pytest tests/integration -v --timeout=60`\n"
+                "3. E2E: `docker compose up -d && pytest tests/e2e -v --timeout=120`"
+            ),
             language="markdown",
+        ),
+        impact=Impact(
+            cost_reduction="medium",
+            latency_reduction="low",
+            reliability_improvement="medium",
+            estimated_savings_detail=(
+                "Moves ~1,200 tokens of workflow instructions from always-loaded CLAUDE.md "
+                "to on-demand commands. Over 30 turns, saves ~36,000 context tokens."
+            ),
+        ),
+        confidence="high",
+        effort="low",
+    ),
+    # -------------------------------------------------------------------------
+    # Settings & Permissions
+    # -------------------------------------------------------------------------
+    Finding(
+        category=AnalyzerType.SETTINGS_PERMISSIONS,
+        model="",
+        location=CodeLocation(file=_CLAUDE_SETTINGS, lines="1-25"),
+        current_state=CodeSnippet(
+            description=(
+                "The .claude/settings.json file has MCP servers configured with API tokens "
+                "directly in the committed file (GITHUB_TOKEN, SLACK_BOT_TOKEN, LINEAR_API_KEY). "
+                "No permission rules are defined, meaning Claude Code will prompt for approval "
+                "on every tool use. No deny rules protect against destructive operations."
+            ),
+            code_snippet=(
+                '{\n'
+                '  "mcpServers": {\n'
+                '    "github": {\n'
+                '      "command": "npx",\n'
+                '      "args": ["-y", "@anthropic-ai/github-mcp"],\n'
+                '      "env": { "GITHUB_TOKEN": "ghp_xxxxxxxxxxxx" }\n'
+                '    },\n'
+                '    "slack": {\n'
+                '      "env": { "SLACK_BOT_TOKEN": "xoxb-xxxxxxxxxxxx" }\n'
+                '    }\n'
+                '  }\n'
+                '}'
+            ),
+            language="json",
+        ),
+        recommendation=Recommendation(
+            title="Move secrets to settings.local.json and add permission rules",
+            description=(
+                "API tokens (GITHUB_TOKEN, SLACK_BOT_TOKEN) are in .claude/settings.json, which "
+                "is committed to version control. These should be in .claude/settings.local.json "
+                "(gitignored) instead.\n\n"
+                "Additionally, adding permission rules reduces friction for safe operations and "
+                "adds guardrails for dangerous ones. Allow read-only tools and common safe commands; "
+                "deny destructive operations like rm -rf and git push --force."
+            ),
+            docs_url="https://docs.anthropic.com/en/docs/claude-code/settings",
+        ),
+        suggested_fix=CodeSnippet(
+            description="Split settings: shared config in settings.json, secrets in settings.local.json",
+            code_snippet=(
+                "# .claude/settings.json (committed, shared with team)\n"
+                "{\n"
+                '  "mcpServers": {\n'
+                '    "github": {\n'
+                '      "command": "npx",\n'
+                '      "args": ["-y", "@anthropic-ai/github-mcp"]\n'
+                "    }\n"
+                "  },\n"
+                '  "permissions": {\n'
+                '    "allow": [\n'
+                '      "Read", "Glob", "Grep",\n'
+                '      "Bash(pytest *)", "Bash(python *)", "Bash(git status)", "Bash(git diff)"\n'
+                "    ],\n"
+                '    "deny": [\n'
+                '      "Bash(rm -rf *)", "Bash(git push --force *)", "Bash(git reset --hard *)"\n'
+                "    ]\n"
+                "  }\n"
+                "}\n\n"
+                "# .claude/settings.local.json (gitignored, per-developer secrets)\n"
+                "{\n"
+                '  "mcpServers": {\n'
+                '    "github": {\n'
+                '      "env": { "GITHUB_TOKEN": "ghp_xxxxxxxxxxxx" }\n'
+                "    }\n"
+                "  }\n"
+                "}"
+            ),
+            language="json",
         ),
         impact=Impact(
             cost_reduction="low",
             latency_reduction="low",
-            reliability_improvement="medium",
+            reliability_improvement="high",
             estimated_savings_detail=(
-                "On-demand commands keep complex workflows accessible without "
-                "bloating CLAUDE.md. Saves context tokens on every non-deployment turn."
+                "Prevents API tokens from being exposed in version control and adds "
+                "guardrails against accidental destructive commands."
+            ),
+        ),
+        confidence="high",
+        effort="low",
+    ),
+    # -------------------------------------------------------------------------
+    # Skills Quality
+    # -------------------------------------------------------------------------
+    Finding(
+        category=AnalyzerType.SKILLS_QUALITY,
+        model="",
+        location=CodeLocation(file=".claude/", lines=""),
+        current_state=CodeSnippet(
+            description=(
+                "No .claude/skills/ directory exists. The CLAUDE.md file contains ~800 tokens "
+                "of deployment-specific domain knowledge and ~400 tokens of testing procedures "
+                "that would be better served as skills. Skills load on-demand when triggered "
+                "by matching context, keeping CLAUDE.md lean."
+            ),
+            code_snippet=(
+                "# No .claude/skills/ directory found\n"
+                "#\n"
+                "# CLAUDE.md contains domain-specific content suitable for skills:\n"
+                "# - Deployment Guide (~800 tokens): Docker + ECR + EKS procedures\n"
+                "# - Testing Pipeline (~400 tokens): unit, integration, E2E instructions\n"
+                "# - API Integration Notes (~200 tokens): Claude API patterns"
+            ),
+            language="bash",
+        ),
+        recommendation=Recommendation(
+            title="Create skills for deployment and API integration workflows",
+            description=(
+                "Skills (.claude/skills/<name>/SKILL.md) are loaded when Claude Code detects "
+                "matching context, not on every turn. They're ideal for domain-specific knowledge "
+                "that only applies to certain tasks.\n\n"
+                "Per Anthropic's best practices:\n"
+                "- Use gerund-form names (e.g., 'deploying-to-production')\n"
+                "- Write descriptions in third person with trigger conditions\n"
+                "- Scope allowed-tools to what the skill actually needs\n"
+                "- Keep body under 500 lines"
+            ),
+            docs_url="https://docs.anthropic.com/en/docs/claude-code/skills",
+        ),
+        suggested_fix=CodeSnippet(
+            description="A deployment skill with proper frontmatter following Anthropic best practices",
+            code_snippet=(
+                "# .claude/skills/deploying-to-production/SKILL.md\n"
+                "---\n"
+                "name: deploying-to-production\n"
+                "description: Handles building, pushing, and deploying the ShopFlow classifier\n"
+                "  to production EKS. Triggers when the user asks to deploy, release, or push\n"
+                "  to production.\n"
+                "allowed-tools:\n"
+                "  - Read\n"
+                "  - Bash(docker *)\n"
+                "  - Bash(kubectl *)\n"
+                "  - Bash(aws ecr *)\n"
+                "---\n"
+                "\n"
+                "## Deployment Checklist\n"
+                "\n"
+                "- [ ] All tests pass (`pytest tests/ -v`)\n"
+                "- [ ] Build Docker image: `docker build -t shopflow-classifier .`\n"
+                "- [ ] Tag for ECR: `docker tag shopflow-classifier:latest 123456789.dkr.ecr...`\n"
+                "- [ ] Push: `docker push 123456789.dkr.ecr...`\n"
+                "- [ ] Apply: `kubectl apply -f k8s/deployment.yaml`\n"
+                "- [ ] Verify: `kubectl rollout status deployment/shopflow-classifier`\n"
+                "\n"
+                "## Rollback\n"
+                "If deployment fails: `kubectl rollout undo deployment/shopflow-classifier`"
+            ),
+            language="markdown",
+        ),
+        impact=Impact(
+            cost_reduction="medium",
+            latency_reduction="low",
+            reliability_improvement="high",
+            estimated_savings_detail=(
+                "Moves domain knowledge from always-loaded CLAUDE.md to triggered skills. "
+                "Reduces per-turn context and gives Claude structured, task-specific guidance "
+                "when deployment tasks are detected."
             ),
         ),
         confidence="medium",
-        effort="low",
+        effort="medium",
+    ),
+    # -------------------------------------------------------------------------
+    # Context Budget
+    # -------------------------------------------------------------------------
+    Finding(
+        category=AnalyzerType.CONTEXT_BUDGET,
+        model="",
+        location=CodeLocation(file=".", lines=""),
+        current_state=CodeSnippet(
+            description=(
+                "Total baseline context loaded on every turn: ~26,200 tokens. This exceeds "
+                "the recommended 20,000-token ceiling.\n\n"
+                "Breakdown:\n"
+                "- CLAUDE.md: ~3,200 tokens\n"
+                "- MCP tool definitions: ~13,000 tokens (65 tools across 3 servers)\n"
+                "- Other context: ~10,000 tokens (system prompt, tool descriptions)\n\n"
+                "The largest contributor is MCP tools (50%), followed by CLAUDE.md (12%)."
+            ),
+            code_snippet=(
+                "# Baseline context budget (loaded every turn)\n"
+                "#\n"
+                "# CLAUDE.md:     ~3,200 tokens (12%)\n"
+                "#   - Project overview:    ~200 tokens\n"
+                "#   - Style guidelines:    ~300 tokens (includes duplicates)\n"
+                "#   - Deployment guide:    ~800 tokens\n"
+                "#   - Testing instructions: ~400 tokens\n"
+                "#   - Stale references:    ~100 tokens\n"
+                "#   - Other:               ~1,400 tokens\n"
+                "#\n"
+                "# MCP tools:    ~13,000 tokens (50%)\n"
+                "#   - github:   ~30 tools x 200 = ~6,000 tokens (6 used)\n"
+                "#   - slack:    ~20 tools x 200 = ~4,000 tokens (3 used)\n"
+                "#   - linear:   ~15 tools x 200 = ~3,000 tokens (0 used)\n"
+                "#\n"
+                "# TOTAL:        ~26,200 tokens per turn\n"
+                "# RECOMMENDED:  <20,000 tokens per turn\n"
+                "# OVER BUDGET:  ~6,200 tokens (31% over)"
+            ),
+            language="bash",
+        ),
+        recommendation=Recommendation(
+            title="Reduce baseline context from ~26,200 to under 20,000 tokens",
+            description=(
+                "Every token in baseline context is repeated on every Claude Code turn. At "
+                "26,200 tokens across 30 turns, that's ~786,000 tokens per session. Quality "
+                "degrades noticeably past 20,000 tokens of baseline context.\n\n"
+                "Biggest wins:\n"
+                "1. Add allowedTools to MCP servers: reduces MCP from ~13,000 to ~1,800 tokens "
+                "(9 tools actually used). Saves ~11,200 tokens.\n"
+                "2. Extract CLAUDE.md workflow sections to commands/skills: reduces CLAUDE.md "
+                "from ~3,200 to ~1,100 tokens. Saves ~2,100 tokens.\n\n"
+                "Combined, this brings total to ~12,900 tokens, well under the 20,000 ceiling."
+            ),
+            docs_url="https://docs.anthropic.com/en/docs/claude-code/best-practices",
+        ),
+        suggested_fix=CodeSnippet(
+            description="Optimized context budget breakdown after applying recommendations",
+            code_snippet=(
+                "# Optimized baseline context budget\n"
+                "#\n"
+                "# CLAUDE.md:     ~1,100 tokens (was 3,200)\n"
+                "#   - Extracted deployment guide to .claude/commands/deploy.md\n"
+                "#   - Extracted testing instructions to .claude/commands/test.md\n"
+                "#   - Removed duplicate style guidelines\n"
+                "#   - Removed stale file references\n"
+                "#\n"
+                "# MCP tools:    ~1,800 tokens (was 13,000)\n"
+                "#   - github: 6 allowed tools x 200 = ~1,200 tokens\n"
+                "#   - slack:  3 allowed tools x 200 = ~600 tokens\n"
+                "#   - linear: removed (unused)\n"
+                "#\n"
+                "# TOTAL:        ~12,900 tokens per turn\n"
+                "# SAVINGS:      ~13,300 tokens per turn (51% reduction)\n"
+                "# PER SESSION:  ~399,000 fewer tokens across 30 turns"
+            ),
+            language="bash",
+        ),
+        impact=Impact(
+            cost_reduction="high",
+            latency_reduction="medium",
+            reliability_improvement="medium",
+            estimated_savings_detail=(
+                "Reduces per-turn baseline context by 51%, from ~26,200 to ~12,900 tokens. "
+                "Improves response quality and cuts session costs significantly."
+            ),
+        ),
+        confidence="medium",
+        effort="medium",
     ),
     # -------------------------------------------------------------------------
     # MCP Tool Definition Bloat
@@ -761,6 +1095,96 @@ Run tests in order:
                 "Removes ~56 unused tool definitions from context (~11,200 tokens per turn). "
                 "Over a 30-turn session, that's ~336,000 fewer tokens. Fewer tools also means "
                 "more accurate tool selection."
+            ),
+        ),
+        confidence="high",
+        effort="low",
+    ),
+
+    # -------------------------------------------------------------------------
+    # Skills from Chat History
+    # -------------------------------------------------------------------------
+    Finding(
+        category=AnalyzerType.SKILLS_FROM_HISTORY,
+        model="",
+        location=CodeLocation(file=".claude/skills/"),
+        current_state=CodeSnippet(
+            description=(
+                "The user repeatedly asks Claude to review all changes before pushing. "
+                "This exact workflow appeared 7 times across 4 sessions with near-identical wording."
+            ),
+            code_snippet=(
+                "Examples from chat history:\n\n"
+                '1. "Review all my changes for bugs, security issues, and inefficiencies before I push"\n'
+                '2. "Go through the diff and check for any issues - bugs, bad patterns, security problems"\n'
+                '3. "Before I push, review everything I changed and flag anything wrong"\n'
+                '4. "Check all my changes for bugs and improvements before I commit"'
+            ),
+            language="markdown",
+        ),
+        recommendation=Recommendation(
+            title="Create a pre-push review skill to replace repeated prompts",
+            description=(
+                "This is the most common repeated workflow in your chat history. Instead of "
+                "typing this prompt every time, create a Skill that Claude auto-triggers when "
+                "you mention reviewing or pushing changes. The skill encapsulates your review "
+                "checklist so it's consistent every time and you never forget a step."
+            ),
+            docs_url="https://docs.anthropic.com/en/docs/claude-code/skills",
+        ),
+        suggested_fix=CodeSnippet(
+            description="Create .claude/skills/reviewing-changes/SKILL.md with this content:",
+            code_snippet="""\
+---
+name: reviewing-changes
+description: Reviews all staged and unstaged code changes for bugs, security
+  issues, performance problems, and code quality. Triggers when the user asks
+  to review changes before pushing, committing, or creating a PR.
+allowed-tools:
+  - Read
+  - Bash(git diff)
+  - Bash(git diff --cached)
+  - Bash(git status)
+  - Bash(git log -10 --oneline)
+  - Grep
+  - Glob
+---
+
+## Pre-Push Code Review Checklist
+
+Review every changed file (`git diff` and `git diff --cached`) against this checklist:
+
+### Security
+- No secrets, API keys, or credentials in code or config
+- No SQL injection, XSS, or command injection vectors
+- Input validation on all external boundaries
+
+### Correctness
+- No off-by-one errors, null pointer risks, or unhandled edge cases
+- Error handling covers failure modes
+- Types are correct and consistent
+
+### Performance
+- No N+1 queries or unnecessary loops
+- No blocking calls in async paths
+- Resource cleanup (close files, connections, cursors)
+
+### Code Quality
+- No dead code, unused imports, or commented-out blocks
+- Naming is clear and consistent
+- No duplicated logic that should be extracted
+
+Report findings grouped by severity (critical > warning > suggestion).\
+""",
+            language="markdown",
+        ),
+        impact=Impact(
+            cost_reduction="low",
+            latency_reduction="medium",
+            reliability_improvement="high",
+            estimated_savings_detail=(
+                "Replaces a manually typed prompt with a consistent, auto-triggered skill — "
+                "ensuring the same thorough review every time with zero effort."
             ),
         ),
         confidence="high",
