@@ -136,13 +136,15 @@ export default function Report() {
     if (!scan) return;
     setApplyState("running");
     try {
-      const { apply_id } = await startApply(getSelectedPrompt(), scan.project_path);
+      const selectedFindings = scan.findings.filter((f) => selectedKeys.has(getFindingKey(f)));
+      const findingTitles = selectedFindings.map((f) => f.recommendation.title);
+      const { apply_id } = await startApply(getSelectedPrompt(), scan.project_path, findingTitles);
       setApplyId(apply_id);
     } catch {
       setApplyState(null);
       setError("Failed to start apply job. Please try again.");
     }
-  }, [scan, getSelectedPrompt]);
+  }, [scan, selectedKeys, getSelectedPrompt]);
 
   const handleApplySuccess = useCallback(() => {
     if (!scanId) return;

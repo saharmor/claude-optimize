@@ -201,12 +201,13 @@ export function subscribeScanStream(
 
 export async function startApply(
   prompt: string,
-  projectPath: string
+  projectPath: string,
+  findingTitles: string[] = [],
 ): Promise<{ apply_id: string; status: string }> {
   const res = await fetch("/api/apply", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ prompt, project_path: projectPath }),
+    body: JSON.stringify({ prompt, project_path: projectPath, finding_titles: findingTitles }),
   });
 
   if (!res.ok) {
@@ -227,6 +228,19 @@ export async function getApplyResult(applyId: string): Promise<ApplyResult> {
   return res.json();
 }
 
+export async function retryPr(applyId: string): Promise<{ pr_url: string }> {
+  const res = await fetch(`/api/apply/${applyId}/retry-pr`, { method: "POST" });
+  if (!res.ok) {
+    const err = (await res.json().catch(() => ({ detail: res.statusText }))) as {
+      detail?: unknown;
+    };
+    throw new Error(
+      formatApiErrorDetail(err.detail, "Failed to retry PR creation")
+    );
+  }
+  return res.json();
+}
+
 export function subscribeApplyStream(
   applyId: string,
   onOutput: (line: string) => void,
@@ -235,6 +249,7 @@ export function subscribeApplyStream(
   onCreatingPr?: () => void,
   onPrCreated?: (prUrl: string) => void,
   onPrFailed?: (error: string) => void,
+  onFindingProgress?: (index: number, status: "applying" | "done") => void,
 ): () => void {
   const es = new EventSource(`/api/apply/${applyId}/stream`);
   let finished = false;
@@ -252,6 +267,13 @@ export function subscribeApplyStream(
     const data = parseData(e.data);
     if (typeof data.line === "string") {
       onOutput(data.line);
+    }
+  });
+
+  es.addEventListener("finding_progress", (e) => {
+    const data = parseData(e.data);
+    if (typeof data.index === "number" && (data.status === "applying" || data.status === "done")) {
+      onFindingProgress?.(data.index, data.status);
     }
   });
 

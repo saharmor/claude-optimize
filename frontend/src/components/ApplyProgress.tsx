@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import confetti from "canvas-confetti";
-import { subscribeApplyStream } from "../api/client";
+import { retryPr, subscribeApplyStream } from "../api/client";
 import type { Finding } from "../types/scan";
 import { ANALYZER_LABELS } from "../types/scan";
 
@@ -59,9 +59,25 @@ export default function ApplyProgress({ applyId, projectPath, findings, onBack, 
   const [creatingPr, setCreatingPr] = useState(false);
   const [prUrl, setPrUrl] = useState<string | null>(null);
   const [prError, setPrError] = useState<string | null>(null);
+  const [retryingPr, setRetryingPr] = useState(false);
+  // Per-finding progress: tracks status for each finding by index
+  const [findingStatuses, setFindingStatuses] = useState<Record<number, "applying" | "done">>({});
   const logRef = useRef<HTMLDivElement>(null);
   const fadeTimerRef = useRef<ReturnType<typeof setTimeout>>();
   const confettiFired = useRef(false);
+
+  const handleRetryPr = useCallback(async () => {
+    setRetryingPr(true);
+    setPrError(null);
+    try {
+      const { pr_url } = await retryPr(applyId);
+      setPrUrl(pr_url);
+    } catch (err) {
+      setPrError(err instanceof Error ? err.message : "Retry failed");
+    } finally {
+      setRetryingPr(false);
+    }
+  }, [applyId]);
 
   useEffect(() => {
     return () => { if (fadeTimerRef.current) clearTimeout(fadeTimerRef.current); };
@@ -91,6 +107,9 @@ export default function ApplyProgress({ applyId, projectPath, findings, onBack, 
       (err) => {
         setCreatingPr(false);
         setPrError(err);
+      },
+      (index, findingStatus) => {
+        setFindingStatuses((prev) => ({ ...prev, [index]: findingStatus }));
       },
     );
 
@@ -180,10 +199,19 @@ export default function ApplyProgress({ applyId, projectPath, findings, onBack, 
         <div className="apply-findings-list">
           {findings.map((f, i) => {
             let rowStatus: "pending" | "applying" | "done" | "failed";
-            if (status === "completed") rowStatus = "done";
-            else if (status === "failed") rowStatus = "failed";
-            else if (started) rowStatus = "applying";
-            else rowStatus = "pending";
+            if (status === "completed") {
+              rowStatus = "done";
+            } else if (status === "failed") {
+              rowStatus = findingStatuses[i] === "done" ? "done" : "failed";
+            } else if (findingStatuses[i]) {
+              // Use per-finding status from backend events
+              rowStatus = findingStatuses[i];
+            } else if (started && i === 0 && !findingStatuses[0]) {
+              // If output has started but no finding_progress events yet, show first as applying
+              rowStatus = "applying";
+            } else {
+              rowStatus = "pending";
+            }
 
             return (
               <div key={i} className={`apply-finding-row apply-finding-row-${rowStatus}`}>
@@ -269,7 +297,23 @@ export default function ApplyProgress({ applyId, projectPath, findings, onBack, 
             ) : prError ? (
               <div className="apply-pr-status apply-pr-warning">
                 <p className="apply-pr-error-text">Could not create PR: {prError}</p>
-                <p className="apply-pr-error-hint">Your changes are saved locally.</p>
+                <p className="apply-pr-error-hint">Your changes are saved locally on the branch.</p>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  style={{ marginTop: "0.5rem" }}
+                  onClick={handleRetryPr}
+                  disabled={retryingPr}
+                >
+                  {retryingPr ? (
+                    <>
+                      <span className="spinner" aria-hidden="true" style={{ width: 14, height: 14, marginRight: 6 }} />
+                      Retrying...
+                    </>
+                  ) : (
+                    "Retry PR Creation"
+                  )}
+                </button>
               </div>
             ) : creatingPr ? (
               <div className="apply-pr-status">

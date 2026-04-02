@@ -59,7 +59,7 @@ async def _mock_apply(on_output: Callable[[str], None]) -> None:
         on_output(line)
 
 
-async def run_apply_job(apply_id: str, prompt: str, project_path: str) -> None:
+async def run_apply_job(apply_id: str, prompt: str, project_path: str, finding_titles: list[str] | None = None) -> None:
     """Run Claude Code to apply selected findings to the project."""
     async with APPLY_SEMAPHORE:
         apply_store.update(apply_id, status="running", started_at=datetime.now(timezone.utc))
@@ -69,11 +69,47 @@ async def run_apply_job(apply_id: str, prompt: str, project_path: str) -> None:
         })
 
         try:
+            # Build lowercase keywords for matching output lines to findings
+            titles = finding_titles or []
+            # Extract significant keywords (3+ chars) from each finding title
+            finding_keywords: list[list[str]] = []
+            for title in titles:
+                words = [w.lower() for w in title.split() if len(w) >= 3]
+                finding_keywords.append(words)
+            current_finding_index = -1
+
+            def _check_finding_progress(line: str) -> None:
+                nonlocal current_finding_index
+                if not titles:
+                    return
+                lower_line = line.lower()
+                # Check each finding after the current one
+                for idx in range(current_finding_index + 1, len(titles)):
+                    keywords = finding_keywords[idx]
+                    # Match if line contains enough keywords from the finding title
+                    if not keywords:
+                        continue
+                    matched = sum(1 for kw in keywords if kw in lower_line)
+                    if matched >= min(2, len(keywords)):
+                        # Mark previous finding as done
+                        if current_finding_index >= 0:
+                            apply_store.notify(apply_id, {
+                                "event": "finding_progress",
+                                "data": {"index": current_finding_index, "status": "done"},
+                            })
+                        current_finding_index = idx
+                        apply_store.notify(apply_id, {
+                            "event": "finding_progress",
+                            "data": {"index": idx, "status": "applying"},
+                        })
+                        break
+
             def on_output(line: str) -> None:
                 apply_store.notify(apply_id, {
                     "event": "apply_output",
                     "data": {"line": line},
                 })
+                _check_finding_progress(line)
 
             is_sample = _is_sample_project(project_path)
 
@@ -84,6 +120,12 @@ async def run_apply_job(apply_id: str, prompt: str, project_path: str) -> None:
 
             if is_sample:
                 await _mock_apply(on_output)
+                # Simulate per-finding progress for sample project
+                for idx in range(len(titles)):
+                    apply_store.notify(apply_id, {
+                        "event": "finding_progress",
+                        "data": {"index": idx, "status": "done"},
+                    })
             else:
                 await run_apply(prompt, project_path, on_output=on_output)
 
@@ -99,6 +141,7 @@ async def run_apply_job(apply_id: str, prompt: str, project_path: str) -> None:
                 on_output("Creating pull request...")
 
                 branch_name = f"claude-optimize/{apply_id}"
+                apply_store.update(apply_id, pr_branch=branch_name)
                 pr_title = "Claude Optimize: Apply optimizations"
                 pr_body = "Optimizations applied by [Claude Optimize](https://github.com/anthropics/claude-optimize)."
 
@@ -119,6 +162,13 @@ async def run_apply_job(apply_id: str, prompt: str, project_path: str) -> None:
                         "event": "pr_failed",
                         "data": {"apply_id": apply_id, "error": str(pr_exc)},
                     })
+
+            # Mark final finding as done
+            if current_finding_index >= 0:
+                apply_store.notify(apply_id, {
+                    "event": "finding_progress",
+                    "data": {"index": current_finding_index, "status": "done"},
+                })
 
             apply_store.update(
                 apply_id,

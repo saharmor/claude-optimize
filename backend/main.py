@@ -291,7 +291,7 @@ async def start_apply(request: ApplyRequest, background_tasks: BackgroundTasks):
     )
     apply_store.create(apply)
 
-    background_tasks.add_task(run_apply_job, apply_id, request.prompt, project_path)
+    background_tasks.add_task(run_apply_job, apply_id, request.prompt, project_path, request.finding_titles)
 
     return {"apply_id": apply_id, "status": "pending"}
 
@@ -329,3 +329,32 @@ async def apply_stream(apply_id: str):
             apply_store.unsubscribe(apply_id, queue)
 
     return EventSourceResponse(event_generator())
+
+
+@app.post("/api/apply/{apply_id}/retry-pr")
+async def retry_pr(apply_id: str):
+    """Re-attempt push + PR creation for a completed apply whose PR failed."""
+    apply = apply_store.get(apply_id)
+    if apply is None:
+        raise HTTPException(status_code=404, detail="Apply job not found")
+    if apply.status != "completed":
+        raise HTTPException(status_code=400, detail="Apply job is not completed")
+    if apply.pr_url:
+        raise HTTPException(status_code=400, detail="PR already created")
+    if not apply.pr_branch:
+        raise HTTPException(status_code=400, detail="No branch info available for retry")
+
+    from git_pr import retry_pull_request
+
+    pr_title = "Claude Optimize: Apply optimizations"
+    pr_body = "Optimizations applied by [Claude Optimize](https://github.com/anthropics/claude-optimize)."
+
+    try:
+        url = await retry_pull_request(
+            apply.project_path, apply.pr_branch, pr_title, pr_body,
+        )
+        apply_store.update(apply_id, pr_url=url, pr_error=None)
+        return {"pr_url": url}
+    except Exception as exc:
+        apply_store.update(apply_id, pr_error=str(exc))
+        raise HTTPException(status_code=500, detail=str(exc))

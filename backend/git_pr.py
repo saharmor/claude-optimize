@@ -70,6 +70,62 @@ async def get_changed_files(project_path: str, before: set[str]) -> list[str]:
     return sorted(after - before)
 
 
+async def retry_pull_request(
+    project_path: str,
+    branch_name: str,
+    pr_title: str,
+    pr_body: str,
+    on_output: Callable[[str], None] | None = None,
+) -> str:
+    """Re-attempt push + PR creation on an existing local branch.
+
+    Assumes the branch already exists with committed changes.
+    Returns the PR URL on success. Raises on failure.
+    """
+    def _log(msg: str) -> None:
+        if on_output:
+            on_output(msg)
+
+    # Verify gh CLI is available
+    try:
+        await _run_git(["gh", "--version"], cwd=project_path)
+    except (RuntimeError, FileNotFoundError):
+        raise RuntimeError(
+            "GitHub CLI (gh) is not installed or not in PATH. "
+            "Install it from https://cli.github.com to enable PR creation."
+        )
+
+    # Verify the branch exists
+    try:
+        await _run_git(["git", "rev-parse", "--verify", branch_name], cwd=project_path)
+    except RuntimeError:
+        raise RuntimeError(f"Branch {branch_name} not found locally. Cannot retry.")
+
+    # Push to remote
+    _log("Pushing to remote...")
+    await _run_git(
+        ["git", "push", "-u", "origin", branch_name],
+        cwd=project_path,
+        timeout=_PUSH_TIMEOUT,
+    )
+
+    # Create PR via GitHub CLI
+    _log("Creating pull request...")
+    pr_url = await _run_git(
+        [
+            "gh", "pr", "create",
+            "--title", pr_title,
+            "--body", pr_body,
+            "--head", branch_name,
+        ],
+        cwd=project_path,
+        timeout=_PUSH_TIMEOUT,
+    )
+
+    _log(f"Pull request created: {pr_url}")
+    return pr_url
+
+
 async def create_pull_request(
     project_path: str,
     branch_name: str,
@@ -155,16 +211,39 @@ async def create_pull_request(
         _log(f"Pull request created: {pr_url}")
         return pr_url
 
-    except Exception:
-        # Clean up the branch on failure so retries don't hit "branch already exists"
+    except Exception as exc:
+        # Keep the branch and commit so changes are preserved locally.
+        # Only clean up if we never got past committing (nothing to preserve).
         if created_branch:
             try:
-                await _run_git(
-                    ["git", "checkout", original_branch], cwd=project_path
-                )
-                await _run_git(
-                    ["git", "branch", "-D", branch_name], cwd=project_path
-                )
+                # Check if we committed anything on this branch
+                has_commit = False
+                try:
+                    log = await _run_git(
+                        ["git", "log", "--oneline", f"{original_branch}..{branch_name}", "--"],
+                        cwd=project_path,
+                    )
+                    has_commit = bool(log.strip())
+                except Exception:
+                    pass
+
+                if has_commit:
+                    # Committed changes exist — switch back but keep the branch
+                    logger.info(
+                        "Keeping branch %s with committed changes (push/PR failed: %s)",
+                        branch_name, exc,
+                    )
+                    await _run_git(
+                        ["git", "checkout", original_branch], cwd=project_path
+                    )
+                else:
+                    # Nothing committed — safe to delete
+                    await _run_git(
+                        ["git", "checkout", original_branch], cwd=project_path
+                    )
+                    await _run_git(
+                        ["git", "branch", "-D", branch_name], cwd=project_path
+                    )
             except Exception:
                 logger.warning("Failed to clean up branch %s", branch_name)
         raise

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import type { Finding } from "../types/scan";
 import CodeBlock from "./CodeBlock";
+import MarkdownContent from "./MarkdownContent";
 
 interface Props {
   finding: Finding;
@@ -203,10 +204,15 @@ export default function FindingCard({ finding, projectPath, focusKey, isSelected
               </a>
             )}
             {finding.suggested_fix.code_snippet && (
-              <CodeBlock
-                code={finding.suggested_fix.code_snippet}
-                language={finding.suggested_fix.language}
-              />
+              finding.suggested_fix.language?.toLowerCase() === "markdown" ||
+              finding.suggested_fix.language?.toLowerCase() === "md" ? (
+                <MarkdownContent content={finding.suggested_fix.code_snippet} />
+              ) : (
+                <CodeBlock
+                  code={finding.suggested_fix.code_snippet}
+                  language={finding.suggested_fix.language}
+                />
+              )
             )}
           </div>
         </div>
