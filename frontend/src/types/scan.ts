@@ -120,6 +120,8 @@ export interface ApplyResult {
   started_at: string | null;
   completed_at: string | null;
   error: string | null;
+  pr_url: string | null;
+  pr_error: string | null;
 }
 
 export const ANALYZER_LABELS: Record<AnalyzerType, string> = {

@@ -231,7 +231,10 @@ export function subscribeApplyStream(
   applyId: string,
   onOutput: (line: string) => void,
   onComplete: () => void,
-  onFailed: (error: string) => void
+  onFailed: (error: string) => void,
+  onCreatingPr?: () => void,
+  onPrCreated?: (prUrl: string) => void,
+  onPrFailed?: (error: string) => void,
 ): () => void {
   const es = new EventSource(`/api/apply/${applyId}/stream`);
   let finished = false;
@@ -253,9 +256,23 @@ export function subscribeApplyStream(
   });
 
   es.addEventListener("apply_complete", () => {
-    finished = true;
     onComplete();
-    es.close();
+  });
+
+  es.addEventListener("creating_pr", () => {
+    onCreatingPr?.();
+  });
+
+  es.addEventListener("pr_created", (e) => {
+    const data = parseData(e.data);
+    if (typeof data.pr_url === "string") {
+      onPrCreated?.(data.pr_url);
+    }
+  });
+
+  es.addEventListener("pr_failed", (e) => {
+    const data = parseData(e.data);
+    onPrFailed?.(typeof data.error === "string" ? data.error : "PR creation failed");
   });
 
   es.addEventListener("apply_failed", (e) => {
@@ -277,6 +294,8 @@ export function subscribeApplyStream(
       try {
         const latest = await getApplyResult(applyId);
         if (latest.status === "completed") {
+          if (latest.pr_url) onPrCreated?.(latest.pr_url);
+          else if (latest.pr_error) onPrFailed?.(latest.pr_error);
           onComplete();
         } else if (latest.status === "failed") {
           onFailed(latest.error || "Apply failed");

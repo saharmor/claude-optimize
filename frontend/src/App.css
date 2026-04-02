@@ -2629,6 +2629,55 @@ select {
   text-decoration: none;
 }
 
+/* PR status within success card */
+.apply-pr-status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+
+.apply-pr-spinner {
+  width: 1rem;
+  height: 1rem;
+}
+
+.apply-pr-success {
+  color: var(--success, #2d6a4f);
+}
+
+.apply-pr-icon {
+  font-weight: bold;
+  font-size: 1rem;
+}
+
+.apply-pr-link {
+  text-decoration: none;
+}
+
+.apply-pr-warning {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.2rem;
+  padding: 0.6rem 0.8rem;
+  border-radius: 6px;
+  background: var(--warning-soft, #fff3cd);
+  border: 1px solid var(--warning-border, #ffc107);
+}
+
+.apply-pr-error-text {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--foreground);
+}
+
+.apply-pr-error-hint {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+}
+
 .apply-share-section {
   display: flex;
   flex-direction: column;

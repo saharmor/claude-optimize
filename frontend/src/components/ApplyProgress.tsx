@@ -56,6 +56,9 @@ export default function ApplyProgress({ applyId, projectPath, findings, onBack, 
   const [error, setError] = useState<string | null>(null);
   const [logFadingOut, setLogFadingOut] = useState(false);
   const [logHidden, setLogHidden] = useState(false);
+  const [creatingPr, setCreatingPr] = useState(false);
+  const [prUrl, setPrUrl] = useState<string | null>(null);
+  const [prError, setPrError] = useState<string | null>(null);
   const logRef = useRef<HTMLDivElement>(null);
   const fadeTimerRef = useRef<ReturnType<typeof setTimeout>>();
   const confettiFired = useRef(false);
@@ -77,7 +80,18 @@ export default function ApplyProgress({ applyId, projectPath, findings, onBack, 
       (err) => {
         setStatus("failed");
         setError(err);
-      }
+      },
+      () => {
+        setCreatingPr(true);
+      },
+      (url) => {
+        setCreatingPr(false);
+        setPrUrl(url);
+      },
+      (err) => {
+        setCreatingPr(false);
+        setPrError(err);
+      },
     );
 
     return unsubscribe;
@@ -243,11 +257,34 @@ export default function ApplyProgress({ applyId, projectPath, findings, onBack, 
         <div className="apply-success-card surface apply-fade-in">
           <div className="apply-success-top">
             <p className="apply-success-heading">Changes are ready for review</p>
-            <p className="apply-success-hint">
-              Open the project in your editor to review and commit the changes.
-            </p>
+
+            {/* PR status */}
+            {prUrl ? (
+              <div className="apply-pr-status apply-pr-success">
+                <span className="apply-pr-icon">&#10003;</span>
+                <a href={prUrl} target="_blank" rel="noopener noreferrer" className="btn btn-primary apply-pr-link">
+                  View Pull Request
+                </a>
+              </div>
+            ) : prError ? (
+              <div className="apply-pr-status apply-pr-warning">
+                <p className="apply-pr-error-text">Could not create PR: {prError}</p>
+                <p className="apply-pr-error-hint">Your changes are saved locally.</p>
+              </div>
+            ) : creatingPr ? (
+              <div className="apply-pr-status">
+                <span className="spinner apply-pr-spinner" aria-hidden="true" />
+                <span>Creating pull request...</span>
+              </div>
+            ) : null}
+
+            {!prUrl && (
+              <p className="apply-success-hint">
+                Open the project in your editor to review and commit the changes.
+              </p>
+            )}
             <div className="apply-success-buttons">
-              <a href={cursorUrl} className="btn btn-primary">
+              <a href={cursorUrl} className={prUrl ? "btn btn-secondary" : "btn btn-primary"}>
                 Open in Cursor
               </a>
               <a href={vscodeUrl} className="btn btn-secondary">
