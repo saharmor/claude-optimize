@@ -868,7 +868,7 @@ select {
 .scan-progress-status {
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  gap: 0.55rem;
 }
 
 .scan-progress-running {
@@ -887,10 +887,6 @@ select {
   flex-shrink: 0;
 }
 
-.scan-progress-pending {
-  color: var(--muted-foreground);
-}
-
 .scan-progress-duration-note {
   color: var(--muted-foreground);
   font-size: 0.78rem;
@@ -901,37 +897,48 @@ select {
 .scan-progress-groups {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  margin-top: 0.25rem;
+  gap: 0.45rem;
 }
 
 .scan-progress-group {
   display: flex;
   flex-direction: column;
-  gap: 0.2rem;
+  gap: 0.35rem;
+  padding: 0.55rem 0.75rem;
+  border-radius: 8px;
+  background: var(--card-soft);
+  border: 1px solid var(--border);
   animation: fade-in-item 0.3s ease;
+  transition: border-color 0.4s ease, background 0.4s ease;
+}
+
+.scan-progress-group--done {
+  border-color: color-mix(in srgb, var(--success) 25%, var(--border));
+  background: color-mix(in srgb, var(--success) 4%, var(--card-soft));
 }
 
 .scan-progress-group-header {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
-  font-size: 0.82rem;
+  gap: 0.45rem;
+  font-size: 0.8rem;
+}
+
+.scan-progress-group-label {
   font-weight: 600;
   color: var(--foreground);
 }
 
 .scan-progress-group-count {
-  font-weight: 400;
+  font-weight: 500;
   color: var(--muted-foreground);
-  font-size: 0.78rem;
+  font-size: 0.75rem;
 }
 
 .scan-progress-group-analyzers {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.25rem 0.5rem;
-  padding-left: 1.2rem;
+  gap: 0.2rem 0.6rem;
   font-size: 0.78rem;
 }
 
@@ -940,14 +947,32 @@ select {
   align-items: center;
   gap: 0.3rem;
   color: var(--muted-foreground);
+  opacity: 0.5;
+  transition: color 0.3s ease, opacity 0.3s ease;
 }
 
 .scan-progress-analyzer-item--running {
   color: var(--foreground);
+  opacity: 1;
 }
 
 .scan-progress-analyzer-item--completed {
   color: var(--success);
+  opacity: 1;
+}
+
+.scan-progress-analyzer-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--success);
+  flex-shrink: 0;
+  animation: check-pop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes check-pop {
+  0% { transform: scale(0); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
 }
 
 .scan-progress-analyzer-dot {
@@ -964,11 +989,7 @@ select {
 
 .scan-progress-analyzer-dot--pending {
   background: var(--muted-foreground);
-  opacity: 0.4;
-}
-
-.scan-progress-analyzer-dot--completed {
-  background: var(--success);
+  opacity: 0.5;
 }
 
 @keyframes pulse-dot {

@@ -563,9 +563,6 @@ export default function Report() {
                 runningAnalyzers={activeAnalyzers.filter(
                   (a) => scan.analyzer_statuses[a] === "running"
                 ).map((a) => ANALYZER_LABELS[a])}
-                pendingAnalyzers={activeAnalyzers.filter(
-                  (a) => scan.analyzer_statuses[a] === "pending"
-                ).map((a) => ANALYZER_LABELS[a])}
                 groups={(() => {
                   const groups: AnalyzerGroupInfo[] = [];
                   const apiAnalyzers = API_ANALYZERS.filter((a) => activeAnalyzers.includes(a));
