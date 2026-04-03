@@ -1,6 +1,7 @@
 import { BrowserRouter, Link, Route, Routes, useNavigate } from "react-router-dom";
 import ScanInput from "./pages/ScanInput";
 import Report from "./pages/Report";
+import History from "./pages/History";
 import "./App.css";
 
 function NotFound() {
@@ -37,8 +38,8 @@ function App() {
               </svg>
               <span className="brand-text">Claude Optimize</span>
             </Link>
-            <div className="topbar-copy">
-              Claude-native audit for cost, latency, and reliability improvements
+            <div className="topbar-right">
+              <Link to="/history" className="topbar-link">History</Link>
             </div>
           </div>
         </header>
@@ -47,6 +48,7 @@ function App() {
           <Routes>
             <Route path="/" element={<ScanInput />} />
             <Route path="/report/:scanId" element={<Report />} />
+            <Route path="/history" element={<History />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </main>

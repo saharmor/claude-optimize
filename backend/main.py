@@ -14,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sse_starlette.sse import EventSourceResponse
 
 from apply_runner import run_apply_job
+from db import get_connection, init_db
 from models import AnalyzerStatus, AnalyzerType, ApplyRequest, ApplyResult, CloneRequest, RecentProjectsResponse, ScanRequest, ScanResult
 from orchestrator import is_sample_project, run_sample_project_scan, run_scan
 from recent_projects import list_recent_projects
@@ -117,6 +118,8 @@ def _validate_project_path(project_path: str) -> str:
     return str(resolved)
 
 
+init_db()
+
 app = FastAPI(title="Claude Optimize", version="0.1.0")
 
 app.add_middleware(
@@ -165,8 +168,11 @@ async def clone_repo(request: CloneRequest):
             detail=f"Clone destination must be inside an allowed root: {allowed_text}",
         )
 
-    if dest.exists() and any(dest.iterdir()):
-        raise HTTPException(status_code=400, detail=f"Destination directory already exists and is not empty: {dest}")
+    if dest.exists():
+        if dest.is_file():
+            raise HTTPException(status_code=400, detail=f"Destination path is a file, not a directory: {dest}")
+        if any(dest.iterdir()):
+            raise HTTPException(status_code=400, detail=f"Destination directory already exists and is not empty: {dest}")
 
     dest.mkdir(parents=True, exist_ok=True)
 
@@ -291,7 +297,14 @@ async def start_apply(request: ApplyRequest, background_tasks: BackgroundTasks):
     )
     apply_store.create(apply)
 
-    background_tasks.add_task(run_apply_job, apply_id, request.prompt, project_path, request.finding_titles)
+    background_tasks.add_task(
+        run_apply_job, apply_id, request.prompt, project_path,
+        finding_titles=request.finding_titles,
+        finding_files=request.finding_files,
+        finding_docs_urls=request.finding_docs_urls,
+        finding_summaries=request.finding_summaries,
+        scan_id=request.scan_id or None,
+    )
 
     return {"apply_id": apply_id, "status": "pending"}
 
@@ -331,6 +344,7 @@ async def apply_stream(apply_id: str):
     return EventSourceResponse(event_generator())
 
 
+
 @app.post("/api/apply/{apply_id}/retry-pr")
 async def retry_pr(apply_id: str):
     """Re-attempt push + PR creation for a completed apply whose PR failed."""
@@ -347,7 +361,7 @@ async def retry_pr(apply_id: str):
     from git_pr import retry_pull_request
 
     pr_title = "Claude Optimize: Apply optimizations"
-    pr_body = "Optimizations applied by [Claude Optimize](https://github.com/anthropics/claude-optimize)."
+    pr_body = "Optimizations applied by [Claude Optimize](https://github.com/saharmor/claude-optimize)."
 
     try:
         url = await retry_pull_request(
@@ -358,3 +372,218 @@ async def retry_pr(apply_id: str):
     except Exception as exc:
         apply_store.update(apply_id, pr_error=str(exc))
         raise HTTPException(status_code=500, detail=str(exc))
+
+
+# --- History endpoints ---
+
+
+@app.get("/api/history/scans")
+def list_scan_history(limit: int = 50, offset: int = 0):
+    if limit < 0 or limit > 500:
+        limit = 50
+    if offset < 0:
+        offset = 0
+    """List past scan runs with the latest apply info inlined."""
+    conn = get_connection()
+    try:
+        rows = conn.execute(
+            """SELECT
+                s.id, s.requested_path, s.scan_mode, s.status,
+                s.started_at, s.completed_at, s.duration_ms,
+                s.error_text, s.no_claude_usage, s.findings_count,
+                s.project_summary_json, s.scorecard_json,
+                s.git_branch, s.git_head_sha,
+                r.id AS repository_id, r.display_name AS repo_name, r.remote_url,
+                w.id AS workspace_id,
+                a.id            AS apply_id,
+                a.status        AS apply_status,
+                a.selection_count AS apply_selection_count,
+                a.pr_url        AS apply_pr_url,
+                a.pr_error      AS apply_pr_error
+            FROM scan_runs s
+            LEFT JOIN repositories r ON s.repository_id = r.id
+            LEFT JOIN workspaces w ON s.workspace_id = w.id
+            LEFT JOIN (
+                SELECT *, ROW_NUMBER() OVER (
+                    PARTITION BY source_scan_run_id ORDER BY started_at DESC
+                ) AS rn
+                FROM apply_jobs
+                WHERE source_scan_run_id IS NOT NULL
+            ) a ON a.source_scan_run_id = s.id AND a.rn = 1
+            ORDER BY s.started_at DESC
+            LIMIT ? OFFSET ?""",
+            (limit, offset),
+        ).fetchall()
+
+        scans = []
+        for row in rows:
+            scan = {
+                "scan_id": row["id"],
+                "project_path": row["requested_path"],
+                "scan_mode": row["scan_mode"],
+                "status": row["status"],
+                "started_at": row["started_at"],
+                "completed_at": row["completed_at"],
+                "duration_ms": row["duration_ms"],
+                "error": row["error_text"],
+                "no_claude_usage": bool(row["no_claude_usage"]),
+                "findings_count": row["findings_count"],
+                "git_branch": row["git_branch"],
+                "git_head_sha": row["git_head_sha"],
+                "repository_id": row["repository_id"],
+                "repo_name": row["repo_name"],
+                "remote_url": row["remote_url"],
+                "workspace_id": row["workspace_id"],
+                "project_summary": None,
+                "scorecard": None,
+                "apply": None,
+            }
+            if row["project_summary_json"]:
+                try:
+                    scan["project_summary"] = json.loads(row["project_summary_json"])
+                except Exception:
+                    pass
+            if row["scorecard_json"]:
+                try:
+                    scan["scorecard"] = json.loads(row["scorecard_json"])
+                except Exception:
+                    pass
+            if row["apply_id"]:
+                scan["apply"] = {
+                    "apply_id": row["apply_id"],
+                    "status": row["apply_status"],
+                    "selection_count": row["apply_selection_count"],
+                    "pr_url": row["apply_pr_url"],
+                    "pr_error": row["apply_pr_error"],
+                }
+            scans.append(scan)
+
+        total_row = conn.execute("SELECT COUNT(*) as total FROM scan_runs").fetchone()
+        total = total_row["total"] if total_row else 0
+
+        return {"scans": scans, "total": total}
+    finally:
+        conn.close()
+
+
+@app.get("/api/history/scans/{scan_id}/analyzers")
+def get_scan_analyzers(scan_id: str):
+    """Get analyzer run details for a specific scan."""
+    conn = get_connection()
+    try:
+        rows = conn.execute(
+            """SELECT analyzer_type, analyzer_group, status,
+                      started_at, completed_at, duration_ms,
+                      model_name, prompt_hash, result_count,
+                      error_text, note_text
+               FROM scan_analyzer_runs
+               WHERE scan_run_id = ?
+               ORDER BY analyzer_type""",
+            (scan_id,),
+        ).fetchall()
+
+        analyzers = []
+        for row in rows:
+            analyzers.append({
+                "analyzer_type": row["analyzer_type"],
+                "analyzer_group": row["analyzer_group"],
+                "status": row["status"],
+                "started_at": row["started_at"],
+                "completed_at": row["completed_at"],
+                "duration_ms": row["duration_ms"],
+                "model_name": row["model_name"],
+                "prompt_hash": row["prompt_hash"],
+                "result_count": row["result_count"],
+                "error": row["error_text"],
+                "note": row["note_text"],
+            })
+
+        return {"analyzers": analyzers}
+    finally:
+        conn.close()
+
+
+@app.get("/api/history/applies")
+def list_apply_history(limit: int = 50, offset: int = 0):
+    if limit < 0 or limit > 500:
+        limit = 50
+    if offset < 0:
+        offset = 0
+    """List past apply jobs, most recent first."""
+    conn = get_connection()
+    try:
+        rows = conn.execute(
+            """SELECT
+                a.id, a.project_path, a.status,
+                a.started_at, a.completed_at, a.duration_ms,
+                a.error_text, a.selection_count,
+                a.pr_url, a.pr_branch, a.pr_error,
+                a.source_scan_run_id,
+                r.display_name AS repo_name, r.remote_url
+            FROM apply_jobs a
+            LEFT JOIN repositories r ON a.repository_id = r.id
+            ORDER BY a.started_at DESC
+            LIMIT ? OFFSET ?""",
+            (limit, offset),
+        ).fetchall()
+
+        applies = []
+        for row in rows:
+            applies.append({
+                "apply_id": row["id"],
+                "project_path": row["project_path"],
+                "status": row["status"],
+                "started_at": row["started_at"],
+                "completed_at": row["completed_at"],
+                "duration_ms": row["duration_ms"],
+                "error": row["error_text"],
+                "selection_count": row["selection_count"],
+                "pr_url": row["pr_url"],
+                "pr_branch": row["pr_branch"],
+                "pr_error": row["pr_error"],
+                "source_scan_run_id": row["source_scan_run_id"],
+                "repo_name": row["repo_name"],
+                "remote_url": row["remote_url"],
+            })
+
+        total_row = conn.execute("SELECT COUNT(*) as total FROM apply_jobs").fetchone()
+        total = total_row["total"] if total_row else 0
+
+        return {"applies": applies, "total": total}
+    finally:
+        conn.close()
+
+
+@app.get("/api/history/applies/{apply_id}/findings")
+def get_apply_findings(apply_id: str):
+    """Get the findings associated with an apply job."""
+    conn = get_connection()
+    try:
+        rows = conn.execute(
+            """SELECT ordinal, title, file_path, docs_url, summary_json, status
+               FROM apply_job_findings
+               WHERE apply_job_id = ?
+               ORDER BY ordinal""",
+            (apply_id,),
+        ).fetchall()
+
+        findings = []
+        for row in rows:
+            finding = {
+                "ordinal": row["ordinal"],
+                "title": row["title"],
+                "file_path": row["file_path"],
+                "docs_url": row["docs_url"],
+                "status": row["status"],
+                "summary": None,
+            }
+            if row["summary_json"]:
+                try:
+                    finding["summary"] = json.loads(row["summary_json"])
+                except Exception:
+                    pass
+            findings.append(finding)
+
+        return {"findings": findings}
+    finally:
+        conn.close()

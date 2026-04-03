@@ -199,15 +199,37 @@ export function subscribeScanStream(
   };
 }
 
+interface FindingSummaryPayload {
+  title: string;
+  description: string;
+  file: string;
+  docs_url: string;
+  cost_reduction: string;
+  latency_reduction: string;
+  reliability_improvement: string;
+}
+
 export async function startApply(
   prompt: string,
   projectPath: string,
   findingTitles: string[] = [],
+  findingFiles: string[] = [],
+  findingDocsUrls: string[] = [],
+  findingSummaries: FindingSummaryPayload[] = [],
+  scanId = "",
 ): Promise<{ apply_id: string; status: string }> {
   const res = await fetch("/api/apply", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ prompt, project_path: projectPath, finding_titles: findingTitles }),
+    body: JSON.stringify({
+      prompt,
+      project_path: projectPath,
+      scan_id: scanId,
+      finding_titles: findingTitles,
+      finding_files: findingFiles,
+      finding_docs_urls: findingDocsUrls,
+      finding_summaries: findingSummaries,
+    }),
   });
 
   if (!res.ok) {
@@ -249,7 +271,8 @@ export function subscribeApplyStream(
   onCreatingPr?: () => void,
   onPrCreated?: (prUrl: string) => void,
   onPrFailed?: (error: string) => void,
-  onFindingProgress?: (index: number, status: "applying" | "done") => void,
+  onFindingProgress?: (index: number, status: "applying" | "done" | "skipped") => void,
+  onKeepalive?: () => void,
 ): () => void {
   const es = new EventSource(`/api/apply/${applyId}/stream`);
   let finished = false;
@@ -272,13 +295,19 @@ export function subscribeApplyStream(
 
   es.addEventListener("finding_progress", (e) => {
     const data = parseData(e.data);
-    if (typeof data.index === "number" && (data.status === "applying" || data.status === "done")) {
+    if (typeof data.index === "number" && (data.status === "applying" || data.status === "done" || data.status === "skipped")) {
       onFindingProgress?.(data.index, data.status);
     }
   });
 
+  es.addEventListener("keepalive", () => {
+    onKeepalive?.();
+  });
+
   es.addEventListener("apply_complete", () => {
+    finished = true;
     onComplete();
+    es.close();
   });
 
   es.addEventListener("creating_pr", () => {
@@ -334,4 +363,42 @@ export function subscribeApplyStream(
     disposed = true;
     es.close();
   };
+}
+
+// --- History API ---
+
+export interface ScanHistoryApply {
+  apply_id: string;
+  status: string;
+  selection_count: number;
+  pr_url: string | null;
+  pr_error: string | null;
+}
+
+export interface ScanHistoryItem {
+  scan_id: string;
+  project_path: string;
+  scan_mode: string;
+  status: string;
+  started_at: string | null;
+  completed_at: string | null;
+  duration_ms: number | null;
+  error: string | null;
+  no_claude_usage: boolean;
+  findings_count: number;
+  git_branch: string | null;
+  git_head_sha: string | null;
+  repository_id: string | null;
+  repo_name: string | null;
+  remote_url: string | null;
+  workspace_id: string | null;
+  project_summary: { one_liner: string; description: string } | null;
+  scorecard: Record<string, unknown> | null;
+  apply: ScanHistoryApply | null;
+}
+
+export async function getScanHistory(limit = 50, offset = 0): Promise<{ scans: ScanHistoryItem[]; total: number }> {
+  const res = await fetch(`/api/history/scans?limit=${limit}&offset=${offset}`);
+  if (!res.ok) throw new Error("Failed to fetch scan history");
+  return res.json();
 }
