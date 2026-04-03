@@ -4,7 +4,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class AnalyzerGroup(str, Enum):
@@ -158,10 +158,35 @@ class ScanResult(BaseModel):
 
 # --- Apply request / result ---
 
+class FindingSummary(BaseModel):
+    title: str
+    description: str = ""
+    file: str = ""
+    docs_url: str = ""
+    cost_reduction: Literal["high", "medium", "low"] = "low"
+    latency_reduction: Literal["high", "medium", "low"] = "low"
+    reliability_improvement: Literal["high", "medium", "low"] = "low"
+
+
 class ApplyRequest(BaseModel):
     prompt: str = Field(..., max_length=100_000)
     project_path: str
+    scan_id: str = ""
     finding_titles: list[str] = Field(default_factory=list)
+    finding_files: list[str] = Field(default_factory=list)
+    finding_docs_urls: list[str] = Field(default_factory=list)
+    finding_summaries: list[FindingSummary] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _check_parallel_list_lengths(self) -> "ApplyRequest":
+        n = len(self.finding_titles)
+        if n and (len(self.finding_files) != n or len(self.finding_docs_urls) != n or len(self.finding_summaries) != n):
+            raise ValueError(
+                f"finding_titles ({n}), finding_files ({len(self.finding_files)}), "
+                f"finding_docs_urls ({len(self.finding_docs_urls)}), and "
+                f"finding_summaries ({len(self.finding_summaries)}) must all have the same length"
+            )
+        return self
 
 
 class ApplyResult(BaseModel):

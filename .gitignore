@@ -20,6 +20,10 @@ dist/
 .DS_Store
 Thumbs.db
 
+# Data (SQLite database and legacy JSON persistence)
+backend/data/
+backend/.data/
+
 # Env
 .env
 .env.local
