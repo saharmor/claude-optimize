@@ -177,44 +177,53 @@ export default function FindingCard({ finding, projectPath, focusKey, isSelected
 
       {expanded && (
         <div className="finding-expanded">
-          <div className="finding-section">
-            <div className="finding-section-label">Current code</div>
-            <p className="finding-description">
-              {finding.current_state.description}
-            </p>
-            <CodeBlock
-              code={finding.current_state.code_snippet}
-              language={finding.current_state.language}
-            />
-          </div>
+          {(finding.current_state.description?.trim() || finding.current_state.code_snippet?.trim()) && (
+            <div className="finding-section">
+              <div className="finding-section-label">Current code</div>
+              {finding.current_state.description?.trim() && (
+                <p className="finding-description">
+                  {finding.current_state.description}
+                </p>
+              )}
+              <CodeBlock
+                code={finding.current_state.code_snippet}
+                language={finding.current_state.language}
+              />
+            </div>
+          )}
 
-          <div className="finding-section">
-            <div className="finding-section-label">Recommendation</div>
-            <p className="finding-description">
-              {finding.recommendation.description}
-            </p>
-            {finding.recommendation.docs_url && (
-              <a
-                className="docs-link"
-                href={finding.recommendation.docs_url}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Read the docs &rarr;
-              </a>
-            )}
-            {finding.suggested_fix.code_snippet && (
-              finding.suggested_fix.language?.toLowerCase() === "markdown" ||
-              finding.suggested_fix.language?.toLowerCase() === "md" ? (
-                <MarkdownContent content={finding.suggested_fix.code_snippet} />
-              ) : (
-                <CodeBlock
-                  code={finding.suggested_fix.code_snippet}
-                  language={finding.suggested_fix.language}
-                />
-              )
-            )}
-          </div>
+          {(finding.recommendation.description?.trim() || finding.recommendation.docs_url?.trim() || finding.suggested_fix.code_snippet?.trim()) && (
+            <div className="finding-section">
+              <div className="finding-section-label">Recommendation</div>
+              {finding.recommendation.description?.trim() && (
+                <p className="finding-description">
+                  {finding.recommendation.description}
+                </p>
+              )}
+              {finding.recommendation.docs_url && (
+                <a
+                  className="docs-link"
+                  href={finding.recommendation.docs_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Read the docs &rarr;
+                </a>
+              )}
+              {finding.suggested_fix.code_snippet?.replace(/```\w*/g, "").trim() && (
+                (finding.suggested_fix.language?.toLowerCase() === "markdown" ||
+                 finding.suggested_fix.language?.toLowerCase() === "md") &&
+                !finding.suggested_fix.code_snippet.trimStart().startsWith("---") ? (
+                  <MarkdownContent content={finding.suggested_fix.code_snippet} />
+                ) : (
+                  <CodeBlock
+                    code={finding.suggested_fix.code_snippet}
+                    language={finding.suggested_fix.language}
+                  />
+                )
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>

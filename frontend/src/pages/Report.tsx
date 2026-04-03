@@ -8,6 +8,7 @@ import { generatePrompt } from "../utils/generatePrompt";
 import { getAppliedFindings, markFindingsApplied } from "../utils/appliedFindings";
 import Scorecard from "../components/Scorecard";
 import AnalyzerSection from "../components/AnalyzerSection";
+import CleanAnalyzersSummary from "../components/CleanAnalyzersSummary";
 import NextSteps from "../components/NextSteps";
 import SelectionBar from "../components/SelectionBar";
 import PromptModal from "../components/PromptModal";
@@ -134,17 +135,28 @@ export default function Report() {
 
   const handleApplyRun = useCallback(async () => {
     if (!scan) return;
-    setApplyState("running");
     try {
       const selectedFindings = scan.findings.filter((f) => selectedKeys.has(getFindingKey(f)));
       const findingTitles = selectedFindings.map((f) => f.recommendation.title);
-      const { apply_id } = await startApply(getSelectedPrompt(), scan.project_path, findingTitles);
+      const findingFiles = selectedFindings.map((f) => f.location.file);
+      const findingDocsUrls = selectedFindings.map((f) => f.recommendation.docs_url || "");
+      const findingSummaries = selectedFindings.map((f) => ({
+        title: f.recommendation.title,
+        description: f.recommendation.description,
+        file: f.location.file,
+        docs_url: f.recommendation.docs_url || "",
+        cost_reduction: f.impact.cost_reduction,
+        latency_reduction: f.impact.latency_reduction,
+        reliability_improvement: f.impact.reliability_improvement,
+      }));
+      const { apply_id } = await startApply(getSelectedPrompt(), scan.project_path, findingTitles, findingFiles, findingDocsUrls, findingSummaries, scanId ?? "");
       setApplyId(apply_id);
+      setApplyState("running");
     } catch {
       setApplyState(null);
       setError("Failed to start apply job. Please try again.");
     }
-  }, [scan, selectedKeys, getSelectedPrompt]);
+  }, [scan, selectedKeys, getSelectedPrompt, scanId]);
 
   const handleApplySuccess = useCallback(() => {
     if (!scanId) return;
@@ -172,6 +184,7 @@ export default function Report() {
     setApplyState("confirm");
     setApplyId(null);
   }, []);
+
 
   // Manage progress bar fade-out when scan finishes
   const fadeTimerRef = useRef<ReturnType<typeof setTimeout>>();
@@ -604,7 +617,7 @@ export default function Report() {
           )}
 
           {hasFindings && streamComplete && (
-            <NextSteps selectedCount={selectedKeys.size} />
+            <NextSteps />
           )}
 
           {/* --- API Optimization Section --- */}
@@ -616,7 +629,38 @@ export default function Report() {
                   No Claude API usage detected. API analyzers were skipped.
                 </p>
               ) : (
-                completedApiAnalyzers.map((analyzer) => (
+                <>
+                  {completedApiAnalyzers
+                    .filter((a) => findingsByCategory[a].length > 0)
+                    .map((analyzer) => (
+                      <AnalyzerSection
+                        key={analyzer}
+                        analyzer={analyzer}
+                        findings={findingsByCategory[analyzer]}
+                        projectPath={scan.project_path}
+                        focusKey={focusKey}
+                        selectedKeys={selectedKeys}
+                        appliedKeys={appliedKeys}
+                        onToggleFinding={toggleFinding}
+                      />
+                    ))}
+                  <CleanAnalyzersSummary
+                    analyzers={completedApiAnalyzers.filter(
+                      (a) => findingsByCategory[a].length === 0
+                    )}
+                  />
+                </>
+              )}
+            </div>
+          )}
+
+          {/* --- Agentic Section --- */}
+          {completedAgenticAnalyzers.length > 0 && (
+            <div className="analyzer-group">
+              <h2 className="analyzer-group-title">{ANALYZER_GROUP_LABELS.agentic}</h2>
+              {completedAgenticAnalyzers
+                .filter((a) => findingsByCategory[a].length > 0)
+                .map((analyzer) => (
                   <AnalyzerSection
                     key={analyzer}
                     analyzer={analyzer}
@@ -627,27 +671,12 @@ export default function Report() {
                     appliedKeys={appliedKeys}
                     onToggleFinding={toggleFinding}
                   />
-                ))
-              )}
-            </div>
-          )}
-
-          {/* --- Agentic Section --- */}
-          {completedAgenticAnalyzers.length > 0 && (
-            <div className="analyzer-group">
-              <h2 className="analyzer-group-title">{ANALYZER_GROUP_LABELS.agentic}</h2>
-              {completedAgenticAnalyzers.map((analyzer) => (
-                <AnalyzerSection
-                  key={analyzer}
-                  analyzer={analyzer}
-                  findings={findingsByCategory[analyzer]}
-                  projectPath={scan.project_path}
-                  focusKey={focusKey}
-                  selectedKeys={selectedKeys}
-                  appliedKeys={appliedKeys}
-                  onToggleFinding={toggleFinding}
-                />
-              ))}
+                ))}
+              <CleanAnalyzersSummary
+                analyzers={completedAgenticAnalyzers.filter(
+                  (a) => findingsByCategory[a].length === 0
+                )}
+              />
             </div>
           )}
 
@@ -705,13 +734,14 @@ export default function Report() {
 
       <div className="report-actions">
         {hasFindings && streamComplete && (
-          <Button variant="secondary" onClick={() => setShowShareModal(true)}>
-            Share Results
-          </Button>
+          <p className="report-actions-hint">Select findings above to fix them with Claude Code</p>
         )}
-        <Button variant="primary" onClick={() => { navigate("/"); window.scrollTo(0, 0); }}>
-          New Audit
-        </Button>
+        {hasFindings && streamComplete &&<div className="report-actions-buttons">
+            <Button variant="secondary" onClick={() => setShowShareModal(true)}>
+              Share Results
+            </Button>
+        </div>
+        }
       </div>
 
       <SelectionBar

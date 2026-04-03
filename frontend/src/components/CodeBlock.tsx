@@ -46,6 +46,8 @@ export default function CodeBlock({ code, language }: Props) {
 
   const lang = normalizeLanguage(language);
 
+  if (!code || !code.trim()) return null;
+
   return (
     <div className="code-block">
       <button type="button" className="copy-btn" onClick={handleCopy}>

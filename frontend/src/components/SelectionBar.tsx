@@ -6,10 +6,8 @@ interface Props {
 }
 
 export default function SelectionBar({ count, onGeneratePrompt, onApply, onClear }: Props) {
-  if (count === 0) return null;
-
   return (
-    <div className="selection-bar">
+    <div className={`selection-bar ${count > 0 ? "selection-bar-visible" : ""}`}>
       <span className="selection-bar-count">
         {count} finding{count !== 1 ? "s" : ""} selected
       </span>

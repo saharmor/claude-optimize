@@ -36,9 +36,11 @@ function CopyButton({ text }: { text: string }) {
       type="button"
       className="copy-btn"
       onClick={async () => {
-        await navigator.clipboard.writeText(text);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
+        try {
+          await navigator.clipboard.writeText(text);
+          setCopied(true);
+          setTimeout(() => setCopied(false), 2000);
+        } catch { /* clipboard access denied */ }
       }}
     >
       {copied ? "Copied!" : "Copy"}
@@ -49,15 +51,20 @@ function CopyButton({ text }: { text: string }) {
 export default function MarkdownContent({ content }: Props) {
   const [copied, setCopied] = useState(false);
 
+  // Return null for empty content, including content that's just empty code fences
+  if (!content || !content.replace(/```\w*/g, "").trim()) return null;
+
   return (
     <div className="markdown-content">
       <button
         type="button"
         className="copy-btn"
         onClick={async () => {
-          await navigator.clipboard.writeText(content);
-          setCopied(true);
-          setTimeout(() => setCopied(false), 2000);
+          try {
+            await navigator.clipboard.writeText(content);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+          } catch { /* clipboard access denied */ }
         }}
       >
         {copied ? "Copied!" : "Copy"}
