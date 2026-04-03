@@ -64,6 +64,9 @@ _STRONG_PATTERNS = [
     re.compile(r"""from\s+langchain_anthropic"""),
     re.compile(r"""from\s+langchain\.chat_models.*import.*ChatAnthropic"""),
     re.compile(r"""ChatAnthropic\s*\("""),
+    # LangChain JS/TS package
+    re.compile(r"""from\s+['"]@langchain/anthropic['"]"""),
+    re.compile(r"""require\s*\(\s*['"]@langchain/anthropic['"]\s*\)"""),
 
     # --- Third-party wrapper: Vercel AI SDK ---
     re.compile(r"""from\s+['"]@ai-sdk/anthropic['"]"""),
