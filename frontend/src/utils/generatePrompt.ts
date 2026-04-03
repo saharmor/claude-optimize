@@ -81,8 +81,9 @@ export function generatePrompt(
       if (finding.suggested_fix.code_snippet?.trim()) {
         lines.push(
           `**Action: Use the Write tool to create a new file** inside \`${stagedDir}\`. ` +
-          `Choose an appropriate filename based on the skill name in the YAML frontmatter (e.g., \`${stagedDir}reviewing-changes.md\`). ` +
-          `Create the directory first with Bash \`mkdir -p ${stagedDir}\`, then write the file with EXACTLY this content:`
+          `Each skill MUST be in its own subdirectory named after the skill, with a file called SKILL.md inside it ` +
+          `(e.g., \`${stagedDir}reviewing-changes/SKILL.md\`). ` +
+          `Create the directory first with Bash \`mkdir -p ${stagedDir}<skill-name>\`, then write the SKILL.md file with EXACTLY this content:`
         );
         lines.push("");
         lines.push(`${finding.suggested_fix.description}`);
@@ -92,8 +93,9 @@ export function generatePrompt(
       } else {
         // No code snippet — give Claude the description and recommendation to work from
         lines.push(
-          `**Action: Use the Write tool to create a new file** inside \`${stagedDir}\` based on the recommendation below. ` +
-          `Create the directory first with Bash \`mkdir -p ${stagedDir}\`, then create the file.`
+          `**Action: Use the Write tool to create a new SKILL.md file** inside a skill subdirectory under \`${stagedDir}\`. ` +
+          `Each skill MUST be in its own subdirectory (e.g., \`${stagedDir}<skill-name>/SKILL.md\`). ` +
+          `Create the directory first with Bash \`mkdir -p ${stagedDir}<skill-name>\`, then create the SKILL.md file.`
         );
         lines.push("");
         lines.push(finding.suggested_fix.description || finding.recommendation.description);

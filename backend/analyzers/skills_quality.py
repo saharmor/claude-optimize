@@ -26,8 +26,16 @@ Only recommend skills if there's clear evidence the project has domain-specific 
 Do NOT suggest skills for simple projects. When suggesting, provide 1-3 specific skills with
 ready-to-use SKILL.md content, including proper YAML frontmatter.
 
+IMPORTANT: Each skill MUST live in its own subdirectory under .claude/skills/, with the
+file named SKILL.md. The directory name is the skill's slug and must be lowercase with
+hyphens only. Do NOT create flat .md files directly in .claude/skills/.
+
+Correct:   .claude/skills/processing-migrations/SKILL.md
+Incorrect: .claude/skills/processing-migrations.md
+
 Example skill structure:
 ```
+# File: .claude/skills/processing-migrations/SKILL.md
 ---
 name: processing-migrations
 description: Handles database migration creation and validation. Triggers when the user

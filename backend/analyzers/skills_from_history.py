@@ -61,9 +61,17 @@ that handles the full workflow.
 
 SKILL STRUCTURE:
 
+IMPORTANT: Each skill MUST live in its own subdirectory under .claude/skills/, with the
+file named SKILL.md. The directory name is the skill's slug and must be lowercase with
+hyphens only. Do NOT create flat .md files directly in .claude/skills/.
+
+Correct:   .claude/skills/reviewing-changes/SKILL.md
+Incorrect: .claude/skills/reviewing-changes.md
+
 When suggesting skills, provide complete SKILL.md files with proper YAML frontmatter:
 
 ```
+# File: .claude/skills/reviewing-changes/SKILL.md
 ---
 name: reviewing-changes
 description: Reviews all staged and unstaged code changes for bugs, security
@@ -87,7 +95,7 @@ REPORT STRUCTURE:
 - For each finding, set location.file to ".claude/skills/" (where the skill would be created)
 - In current_state, show the repeated user messages as evidence (include count and examples)
 - In recommendation, explain what skill to create and why (plain English only — do NOT put code or file content here)
-- In suggested_fix, you MUST put the complete SKILL.md file content (with YAML frontmatter and body) in the "code_snippet" field. The "description" field should be a one-line summary like "Create a reviewing-changes skill". The actual file content goes in "code_snippet", NOT in "description".
+- In suggested_fix, you MUST put the complete SKILL.md file content (with YAML frontmatter and body) in the "code_snippet" field. The "description" field should reference the subdirectory path like "Create .claude/skills/reviewing-changes/SKILL.md with this content:". The actual file content goes in "code_snippet", NOT in "description".
 - Set language to "markdown" for both current_state and suggested_fix
 
 CRITICAL: The suggested_fix.code_snippet field must NEVER be empty. It must always contain the full, ready-to-use SKILL.md file content including the YAML frontmatter (---) and the markdown body. If you cannot generate a skill file, do not include the finding.
