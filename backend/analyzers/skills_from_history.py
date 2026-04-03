@@ -24,6 +24,12 @@ actual chat messages from past conversations. Your job is to find patterns —
 prompts the user types repeatedly, workflows they kick off often, or domain
 knowledge they paste in again and again.
 
+NOTE: The messages below have been pre-clustered by semantic similarity.
+Each "Intent cluster" groups messages that express the same intent, with a count
+and representative examples. Treat each cluster as a single recurring pattern.
+Unclustered messages are shown individually — look for potential patterns
+the clustering may have missed.
+
 ---
 
 **ISSUE A: Repeated workflow prompt**
@@ -34,9 +40,9 @@ accomplish a recurring task. Examples:
 - "Run the tests, fix any failures, then run them again"
 - "Update the changelog and bump the version"
 
-For each cluster of similar prompts, report:
-- How many times this intent appeared (count)
-- 2-3 example messages showing the pattern
+The messages are already pre-grouped into intent clusters. For each cluster, report:
+- The count shown in the cluster header (do not re-count)
+- The example messages from the cluster as evidence
 - A ready-to-use SKILL.md that automates this workflow
 
 **ISSUE B: Repeated context pasting**
@@ -80,9 +86,11 @@ allowed-tools:
 REPORT STRUCTURE:
 - For each finding, set location.file to ".claude/skills/" (where the skill would be created)
 - In current_state, show the repeated user messages as evidence (include count and examples)
-- In recommendation, explain what skill to create and why
-- In suggested_fix, provide the complete SKILL.md content ready to use
+- In recommendation, explain what skill to create and why (plain English only — do NOT put code or file content here)
+- In suggested_fix, you MUST put the complete SKILL.md file content (with YAML frontmatter and body) in the "code_snippet" field. The "description" field should be a one-line summary like "Create a reviewing-changes skill". The actual file content goes in "code_snippet", NOT in "description".
 - Set language to "markdown" for both current_state and suggested_fix
+
+CRITICAL: The suggested_fix.code_snippet field must NEVER be empty. It must always contain the full, ready-to-use SKILL.md file content including the YAML frontmatter (---) and the markdown body. If you cannot generate a skill file, do not include the finding.
 
 IMPACT ESTIMATION:
 - Repeated workflow (A): cost_reduction "low", latency_reduction "medium",

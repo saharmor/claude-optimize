@@ -10,7 +10,7 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 from analyzers import API_ANALYZER_PROMPTS, AGENTIC_ANALYZER_PROMPTS
-from claude_runner import run_analyzer, run_project_summary
+from claude_runner import AnalyzerResult, run_analyzer, run_project_summary
 from detect_claude_usage import has_claude_usage
 from demo_findings import DEMO_FINDINGS as SAMPLE_PROJECT_FINDINGS
 from models import AnalyzerStatus, AnalyzerType, ANALYZER_GROUPS, AnalyzerGroup, Finding
@@ -81,21 +81,20 @@ async def run_scan(scan_id: str, project_path: str) -> None:
 
     # Mark API analyzers as skipped if no Claude API usage detected
     if not has_api_usage:
-        scan = store.get(scan_id)
-        if scan:
-            scan.no_claude_usage = True
-            for a in API_ANALYZERS:
-                scan.analyzer_statuses[a] = AnalyzerStatus.COMPLETED
-                scan.analyzer_notes[a] = "Skipped: no Claude API usage detected"
-                store.notify(scan_id, {
-                    "event": "analyzer_complete",
-                    "data": {
-                        "analyzer": a.value,
-                        "finding_count": 0,
-                        "note": "Skipped: no Claude API usage detected",
-                    },
-                })
+        store.update(scan_id, no_claude_usage=True)
+        for a in API_ANALYZERS:
+            store.update_analyzer_status(scan_id, a, AnalyzerStatus.COMPLETED)
+            store.update_analyzer_note(scan_id, a, "Skipped: no Claude API usage detected")
+            store.notify(scan_id, {
+                "event": "analyzer_complete",
+                "data": {
+                    "analyzer": a.value,
+                    "finding_count": 0,
+                    "note": "Skipped: no Claude API usage detected",
+                },
+            })
 
+    summary_task = None
     try:
         async with SCAN_SEMAPHORE:
             summary_task = asyncio.create_task(_run_project_summary(scan_id, project_path))
@@ -121,16 +120,21 @@ async def run_scan(scan_id: str, project_path: str) -> None:
             if isinstance(result, Exception):
                 failed_analyzers += 1
 
-        scan = store.get(scan_id)
-        if scan:
-            scan.completed_at = datetime.now(timezone.utc)
-            if failed_analyzers == len(tasks):
-                scan.status = "failed"
-                scan.error = "All analyzers failed. Check Claude CLI configuration and permissions."
-            else:
-                scan.status = "completed"
-                if failed_analyzers:
-                    scan.error = f"{failed_analyzers} analyzer(s) failed, but partial results are available."
+        if failed_analyzers == len(tasks):
+            scan = store.update(
+                scan_id,
+                status="failed",
+                error="All analyzers failed. Check Claude CLI configuration and permissions.",
+                completed_at=datetime.now(timezone.utc),
+            )
+        else:
+            error_msg = f"{failed_analyzers} analyzer(s) failed, but partial results are available." if failed_analyzers else None
+            scan = store.update(
+                scan_id,
+                status="completed",
+                error=error_msg,
+                completed_at=datetime.now(timezone.utc),
+            )
 
         store.notify(scan_id, {
             "event": "scan_complete",
@@ -159,7 +163,8 @@ async def run_scan(scan_id: str, project_path: str) -> None:
             },
         })
     finally:
-        await summary_task
+        if summary_task is not None:
+            await summary_task
         _notify_stream_complete_if_ready(scan_id)
 
 
@@ -188,10 +193,11 @@ async def run_sample_project_scan(scan_id: str, project_path: str) -> None:
         ]
         await asyncio.gather(*tasks, return_exceptions=True)
 
-        scan = store.get(scan_id)
-        if scan:
-            scan.completed_at = datetime.now(timezone.utc)
-            scan.status = "completed"
+        scan = store.update(
+            scan_id,
+            status="completed",
+            completed_at=datetime.now(timezone.utc),
+        )
 
         store.notify(scan_id, {
             "event": "scan_complete",
@@ -231,7 +237,7 @@ async def _run_sample_project_analyzer(
     store.update_analyzer_status(scan_id, analyzer_type, AnalyzerStatus.RUNNING)
     await asyncio.sleep(_SAMPLE_PROJECT_DELAYS.get(analyzer_type, 5.0))
     findings = _SAMPLE_PROJECT_FINDINGS_BY_TYPE.get(analyzer_type, [])
-    _store_analyzer_findings(scan_id, findings)
+    _store_analyzer_findings(scan_id, findings, analyzer_type)
     store.update_analyzer_status(scan_id, analyzer_type, AnalyzerStatus.COMPLETED)
     store.notify(scan_id, {
         "event": "analyzer_complete",
@@ -259,23 +265,30 @@ async def _run_single_analyzer(
 
     try:
         prompt = await asyncio.to_thread(_build_prompt, prompt_builder, project_path)
-        findings, note = await run_analyzer(prompt, project_path)
-        _store_analyzer_findings(scan_id, findings)
-        if note:
-            scan = store.get(scan_id)
-            if scan:
-                scan.analyzer_notes[analyzer_type] = note
+        result: AnalyzerResult = await run_analyzer(prompt, project_path)
+        _store_analyzer_findings(scan_id, result.findings, analyzer_type)
+        if result.note:
+            store.update_analyzer_note(scan_id, analyzer_type, result.note)
+
+        # Persist prompt metadata and raw output to SQLite
+        store.persist_analyzer_prompt_metadata(
+            scan_id, analyzer_type,
+            model_name=result.model_name,
+            prompt_hash=result.prompt_hash,
+            raw_output=result.raw_output,
+            result_count=len(result.findings),
+        )
+
         store.update_analyzer_status(scan_id, analyzer_type, AnalyzerStatus.COMPLETED)
-        # Notify with finding count
         store.notify(scan_id, {
             "event": "analyzer_complete",
             "data": {
                 "analyzer": analyzer_type.value,
-                "finding_count": len(findings),
-                "note": note,
+                "finding_count": len(result.findings),
+                "note": result.note,
             },
         })
-        return findings
+        return result.findings
     except Exception as exc:
         store.update_analyzer_status(scan_id, analyzer_type, AnalyzerStatus.FAILED)
         store.update_analyzer_error(scan_id, analyzer_type, str(exc))
@@ -325,10 +338,13 @@ async def _run_sample_project_summary(scan_id: str) -> None:
         })
 
 
-def _store_analyzer_findings(scan_id: str, findings: list[Finding]) -> None:
+def _store_analyzer_findings(scan_id: str, findings: list[Finding], analyzer_type: AnalyzerType | None = None) -> None:
     scan = store.add_findings(scan_id, findings)
     if scan:
         scan.scorecard = build_report(scan.findings)
+    # Persist findings to SQLite
+    if analyzer_type:
+        store.persist_findings(scan_id, findings, analyzer_type)
 
 
 def _notify_stream_complete_if_ready(scan_id: str) -> None:

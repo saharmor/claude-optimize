@@ -1,22 +1,40 @@
-"""Extract user messages from Claude Code chat history JSONL files.
+"""Extract user messages from Claude Code and Cursor chat history.
 
 Claude Code stores conversation history at:
   ~/.claude/projects/<encoded-project-path>/<session-uuid>.jsonl
 
-Each JSONL file contains one conversation session with records like:
-  {"type": "user", "message": {"role": "user", "content": "..."}, ...}
+Cursor stores data in SQLite databases (.vscdb files):
+  Workspace DBs: ~/Library/Application Support/Cursor/User/workspaceStorage/<hash>/state.vscdb
+  Global chat DB: ~/Library/Application Support/Cursor/User/globalStorage/state.vscdb
 """
 from __future__ import annotations
 
 import json
 import logging
+import os
 import re
+import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import unquote, urlparse
 
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# Claude Code paths
+# ---------------------------------------------------------------------------
 CLAUDE_DIR = Path.home() / ".claude" / "projects"
+
+# ---------------------------------------------------------------------------
+# Cursor paths (macOS)
+# ---------------------------------------------------------------------------
+_CURSOR_BASE = Path.home() / "Library" / "Application Support" / "Cursor" / "User"
+_CURSOR_WORKSPACE_STORAGE = _CURSOR_BASE / "workspaceStorage"
+_CURSOR_GLOBAL_DB_CANDIDATES = [
+    _CURSOR_BASE / "globalStorage" / "state.vscdb",
+    _CURSOR_BASE / "globalStorage" / "cursor.cursor" / "state.vscdb",
+    _CURSOR_BASE / "globalStorage" / "cursor" / "state.vscdb",
+]
 
 # Known XML tag names injected by Claude Code. We match these specifically
 # rather than using a generic <...>...</...> regex that mishandles nesting.
@@ -67,9 +85,23 @@ _MIN_MESSAGE_LENGTH = 20
 # Maximum messages to embed in the prompt (to stay within context limits)
 MAX_MESSAGES_FOR_PROMPT = 150
 
+# Intent clustering
+CLUSTER_SIMILARITY_THRESHOLD = 0.3
+_MAX_CLUSTER_EXAMPLES = 3
+
+STOP_WORDS = frozenset({
+    "a", "an", "the", "and", "or", "but", "in", "on", "at", "to", "for",
+    "of", "with", "by", "from", "is", "it", "be", "as", "was", "are",
+    "this", "that", "these", "those", "i", "my", "me", "we", "you", "your",
+    "can", "do", "does", "did", "will", "would", "should", "could",
+    "have", "has", "had", "not", "no", "so", "if", "then", "than",
+    "all", "also", "just", "about", "up", "out", "into",
+    "please", "make", "sure", "want", "need", "like", "use",
+})
+
 # Limits to avoid reading too much data from disk
 _MAX_JSONL_FILES = 200
-_MAX_TOTAL_BYTES = 50 * 1024 * 1024  # 50 MB
+_MAX_TOTAL_BYTES = 200 * 1024 * 1024  # 200 MB
 
 
 @dataclass
@@ -77,6 +109,32 @@ class ExtractedMessage:
     session_id: str
     text: str
     timestamp: str
+
+
+@dataclass
+class MessageCluster:
+    """A group of semantically similar messages."""
+    seed_tokens: frozenset[str]
+    messages: list[ExtractedMessage]  # unique messages in this cluster
+    exact_dupe_count: int  # total count including exact duplicates
+
+
+_TOKENIZE_RE = re.compile(r"\W+")
+
+
+def _tokenize(text: str) -> frozenset[str]:
+    """Tokenize text into a set of meaningful lowercase words."""
+    tokens = _TOKENIZE_RE.split(text.lower())
+    result = frozenset(t for t in tokens if len(t) >= 2 and t not in STOP_WORDS)
+    return result if result else frozenset({text.lower().strip()})
+
+
+def _jaccard(a: frozenset[str], b: frozenset[str]) -> float:
+    """Jaccard similarity: size of intersection / size of union."""
+    union = a | b
+    if not union:
+        return 0.0
+    return len(a & b) / len(union)
 
 
 def _project_path_to_dir_name(project_path: str) -> str:
@@ -142,13 +200,69 @@ def _extract_user_text(content: str | list) -> str | None:
     return None
 
 
-def extract_messages(project_path: str) -> list[ExtractedMessage]:
-    """Extract all user messages from chat history for the given project."""
+def _cluster_messages(
+    messages: list[ExtractedMessage],
+    threshold: float = CLUSTER_SIMILARITY_THRESHOLD,
+) -> tuple[list[MessageCluster], list[ExtractedMessage]]:
+    """Cluster messages by Jaccard similarity using greedy centroid-absorb.
+
+    Returns (multi_clusters, singletons) where multi_clusters have ≥2 unique
+    messages or ≥2 exact duplicates, and singletons are ungrouped messages.
+    """
+    # Step 1: exact dedup with frequency counting
+    seen: dict[str, int] = {}
+    unique: list[ExtractedMessage] = []
+    for msg in messages:
+        key = msg.text.strip().lower()
+        if key in seen:
+            seen[key] += 1
+        else:
+            seen[key] = 1
+            unique.append(msg)
+
+    # Step 2: sort by frequency desc (so high-frequency messages become seeds)
+    unique.sort(key=lambda m: seen[m.text.strip().lower()], reverse=True)
+
+    # Step 3: greedy centroid-absorb clustering
+    clusters: list[MessageCluster] = []
+    for msg in unique:
+        tokens = _tokenize(msg.text)
+        freq = seen[msg.text.strip().lower()]
+
+        best_sim = 0.0
+        best_cluster: MessageCluster | None = None
+        for cluster in clusters:
+            sim = _jaccard(tokens, cluster.seed_tokens)
+            if sim > best_sim:
+                best_sim = sim
+                best_cluster = cluster
+
+        if best_sim >= threshold and best_cluster is not None:
+            best_cluster.messages.append(msg)
+            best_cluster.exact_dupe_count += freq
+        else:
+            clusters.append(MessageCluster(
+                seed_tokens=tokens,
+                messages=[msg],
+                exact_dupe_count=freq,
+            ))
+
+    # Step 4: split into multi-message clusters and singletons
+    multi = [c for c in clusters if len(c.messages) >= 2 or c.exact_dupe_count >= 2]
+    singletons = [
+        c.messages[0] for c in clusters
+        if len(c.messages) == 1 and c.exact_dupe_count == 1
+    ]
+    return multi, singletons
+
+
+def _extract_claude_code_messages(project_path: str) -> list[ExtractedMessage]:
+    """Extract user messages from Claude Code JSONL chat history."""
     dir_name = _project_path_to_dir_name(project_path)
     history_dir = CLAUDE_DIR / dir_name
 
     if not history_dir.is_dir():
-        logger.info("No chat history found for project: %s", project_path)
+        logger.info("No Claude Code chat history found for project: %s", project_path)
         return []
 
     messages: list[ExtractedMessage] = []
@@ -192,49 +306,229 @@ def extract_messages(project_path: str) -> list[ExtractedMessage]:
         except Exception:
             logger.warning("Failed to read session file: %s", jsonl_file, exc_info=True)
 
+    logger.info("Claude Code: extracted %d messages", len(messages))
     return messages
 
 
-def format_messages_for_prompt(messages: list[ExtractedMessage]) -> str:
-    """Format extracted messages into a string suitable for embedding in a prompt.
+# ---------------------------------------------------------------------------
+# Cursor extraction helpers
+# ---------------------------------------------------------------------------
 
-    Truncates to MAX_MESSAGES_FOR_PROMPT and adds session context.
+def _cursor_safe_query(
+    db_path: Path, query: str, params: tuple = (),
+) -> list[sqlite3.Row] | None:
+    """Execute a read-only SQLite query, returning rows or None on error."""
+    if not db_path.exists():
+        return None
+    conn = None
+    try:
+        conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute(query, params).fetchall()
+        return rows
+    except Exception as e:
+        logger.debug("Cursor DB query failed on %s: %s", db_path, e)
+        return None
+    finally:
+        if conn is not None:
+            conn.close()
+
+
+def _cursor_uri_to_path(uri: str) -> str | None:
+    """Convert a file:// URI to a filesystem path."""
+    try:
+        parsed = urlparse(uri)
+        if parsed.scheme == "file":
+            return unquote(parsed.path)
+        return unquote(uri)
+    except Exception:
+        return None
+
+
+def _cursor_find_workspace_ids(target_project: str) -> list[str]:
+    """Find Cursor workspace IDs whose folder matches the target project."""
+    target = os.path.realpath(target_project).rstrip("/")
+    if not _CURSOR_WORKSPACE_STORAGE.exists():
+        return []
+
+    matches: list[str] = []
+    for ws_dir in _CURSOR_WORKSPACE_STORAGE.iterdir():
+        workspace_json = ws_dir / "workspace.json"
+        if not workspace_json.exists():
+            continue
+        try:
+            data = json.loads(workspace_json.read_text())
+            folder = data.get("folder")
+            if not folder:
+                continue
+            p = _cursor_uri_to_path(folder)
+            if not p:
+                continue
+            resolved = os.path.realpath(p).rstrip("/")
+            if resolved == target:
+                matches.append(ws_dir.name)
+        except Exception:
+            continue
+
+    return matches
+
+
+def _cursor_get_composer_ids(workspace_id: str) -> set[str]:
+    """Read composer IDs from a Cursor workspace's state.vscdb."""
+    db_path = _CURSOR_WORKSPACE_STORAGE / workspace_id / "state.vscdb"
+    rows = _cursor_safe_query(
+        db_path,
+        "SELECT value FROM ItemTable WHERE key = ?",
+        ("composer.composerData",),
+    )
+    if not rows:
+        return set()
+    try:
+        val = rows[0]["value"]
+        if isinstance(val, bytes):
+            val = val.decode("utf-8", errors="replace")
+        data = json.loads(val)
+        return {
+            c["composerId"]
+            for c in data.get("allComposers", [])
+            if "composerId" in c
+        }
+    except (json.JSONDecodeError, TypeError, KeyError):
+        return set()
+
+
+def _cursor_find_global_db() -> Path | None:
+    """Locate the global Cursor state.vscdb."""
+    for candidate in _CURSOR_GLOBAL_DB_CANDIDATES:
+        if candidate.exists():
+            return candidate
+    gs = _CURSOR_BASE / "globalStorage"
+    if gs.exists():
+        for p in gs.rglob("state.vscdb"):
+            return p
+    return None
+
+
+def _extract_cursor_messages(project_path: str) -> list[ExtractedMessage]:
+    """Extract user messages from Cursor chat history for the given project."""
+    if not _CURSOR_BASE.exists():
+        return []
+
+    workspace_ids = _cursor_find_workspace_ids(project_path)
+    if not workspace_ids:
+        logger.info("No Cursor workspace found for project: %s", project_path)
+        return []
+
+    composer_ids: set[str] = set()
+    for ws_id in workspace_ids:
+        composer_ids |= _cursor_get_composer_ids(ws_id)
+
+    if not composer_ids:
+        logger.info("No Cursor composers found for project: %s", project_path)
+        return []
+
+    global_db = _cursor_find_global_db()
+    if not global_db:
+        return []
+
+    rows = _cursor_safe_query(
+        global_db,
+        "SELECT key, value FROM cursorDiskKV WHERE key LIKE ?",
+        ("bubbleId:%",),
+    )
+    if not rows:
+        return []
+
+    messages: list[ExtractedMessage] = []
+    for row in rows:
+        key = row["key"]
+        parts = key.split(":")
+        if len(parts) < 3:
+            continue
+        composer_id = parts[1]
+        if composer_id not in composer_ids:
+            continue
+
+        val = row["value"]
+        if val is None:
+            continue
+        if isinstance(val, bytes):
+            val = val.decode("utf-8", errors="replace")
+        try:
+            d = json.loads(val)
+        except (json.JSONDecodeError, TypeError):
+            continue
+
+        if d.get("type") != 1:  # only user messages
+            continue
+        text = (d.get("text") or "").strip()
+        if len(text) < _MIN_MESSAGE_LENGTH:
+            continue
+
+        messages.append(ExtractedMessage(
+            session_id=f"cursor-{composer_id}",
+            text=text,
+            timestamp="",
+        ))
+
+    logger.info("Cursor: extracted %d messages from %d composers", len(messages), len(composer_ids))
+    return messages
+
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
+
+def extract_messages(project_path: str) -> list[ExtractedMessage]:
+    """Extract all user messages from both Claude Code and Cursor history."""
+    cc_messages = _extract_claude_code_messages(project_path)
+    cursor_messages = _extract_cursor_messages(project_path)
+    combined = cc_messages + cursor_messages
+    logger.info(
+        "Total extracted: %d messages (Claude Code: %d, Cursor: %d)",
+        len(combined), len(cc_messages), len(cursor_messages),
+    )
+    return combined
+
+
+def format_messages_for_prompt(messages: list[ExtractedMessage]) -> str:
+    """Format extracted messages as pre-clustered intent groups for the LLM.
+
+    Uses Jaccard similarity to cluster messages by intent, then formats as:
+    - Intent clusters (with count + representative examples)
+    - Unclustered singleton messages (most recent first)
     """
     if not messages:
         return "(No chat history found for this project.)"
 
-    # Deduplicate exact matches while preserving count
-    seen: dict[str, int] = {}
-    unique_messages: list[ExtractedMessage] = []
-    for msg in messages:
-        normalized = msg.text.strip().lower()
-        if normalized in seen:
-            seen[normalized] += 1
-        else:
-            seen[normalized] = 1
-            unique_messages.append(msg)
+    clusters, singletons = _cluster_messages(messages)
 
-    # Show repeated messages first (sorted by frequency), then fill remaining
-    # slots with recent unique messages to surface complex one-off workflows.
-    repeated = [m for m in unique_messages if seen[m.text.strip().lower()] > 1]
-    repeated.sort(key=lambda m: seen[m.text.strip().lower()], reverse=True)
-    singles = [m for m in unique_messages if seen[m.text.strip().lower()] == 1]
-    # Singles are already in file-order (chronological); show most recent first
-    singles.reverse()
-    selected = (repeated + singles)[:MAX_MESSAGES_FOR_PROMPT]
+    # Sort clusters by total message count descending
+    clusters.sort(key=lambda c: c.exact_dupe_count, reverse=True)
 
-    lines = []
+    lines: list[str] = []
     lines.append(f"Total user messages: {len(messages)}")
-    lines.append(f"Unique messages: {len(unique_messages)}")
+    lines.append(f"Intent clusters: {len(clusters)}")
+    lines.append(f"Unclustered messages: {len(singletons)}")
     lines.append(f"Sessions: {len(set(m.session_id for m in messages))}")
     lines.append("")
 
-    for msg in selected:
-        count = seen[msg.text.strip().lower()]
-        count_label = f" [repeated {count}x]" if count > 1 else ""
-        # Truncate very long messages
+    # Clusters first — pick shortest messages as representatives (clearest intent)
+    for cluster in clusters:
+        lines.append(f"=== Intent cluster ({cluster.exact_dupe_count} messages across sessions) ===")
+        lines.append("Examples:")
+        reps = sorted(cluster.messages, key=lambda m: len(m.text))[:_MAX_CLUSTER_EXAMPLES]
+        for rep in reps:
+            text = rep.text if len(rep.text) <= 300 else rep.text[:300] + "..."
+            lines.append(f'  - "{text}"')
+        lines.append("")
+
+    # Singletons — most recent first, capped by remaining budget
+    singletons.reverse()
+    remaining = max(MAX_MESSAGES_FOR_PROMPT - sum(c.exact_dupe_count for c in clusters), 20)
+    for msg in singletons[:remaining]:
         text = msg.text if len(msg.text) <= 500 else msg.text[:500] + "..."
-        lines.append(f"--- Message{count_label} (session: {msg.session_id[:8]}) ---")
+        lines.append(f"--- Unclustered message (session: {msg.session_id[:8]}) ---")
         lines.append(text)
         lines.append("")
 
