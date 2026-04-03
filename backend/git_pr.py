@@ -248,8 +248,35 @@ async def create_pull_request(
         created_branch = True
 
         # 3. Stage ONLY the files changed by the apply
+        #    Some files (e.g. .claude/settings.json) may live in gitignored dirs.
+        #    Use --force only for those specific files to avoid accidentally
+        #    staging secrets or build artifacts.
         _log("Staging changes...")
-        await _run_git(["git", "add", "--"] + changed_files, cwd=project_path)
+        ignored_files: list[str] = []
+        normal_files: list[str] = []
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "git", "check-ignore", "--", *changed_files,
+                cwd=project_path,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=_CMD_TIMEOUT)
+            ignored_set = set(stdout.decode().strip().splitlines())
+            for f in changed_files:
+                if f in ignored_set:
+                    ignored_files.append(f)
+                else:
+                    normal_files.append(f)
+        except (asyncio.TimeoutError, Exception):
+            # If check-ignore fails, treat all as normal (safe default)
+            normal_files = changed_files
+
+        if normal_files:
+            await _run_git(["git", "add", "--"] + normal_files, cwd=project_path)
+        if ignored_files:
+            logger.info("Force-staging gitignored files: %s", ignored_files)
+            await _run_git(["git", "add", "--force", "--"] + ignored_files, cwd=project_path)
 
         # 4. Check there are actual staged changes to commit
         check = await asyncio.create_subprocess_exec(
