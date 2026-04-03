@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+.venv/
+
+# Build output
+frontend/dist/
+
+# Python bytecode
+__pycache__/
+*.pyc
+
+# Lockfiles (auto-generated, thousands of lines)
+package-lock.json
+
+# Data / databases
+backend/data/
+
+# Large planning docs (not source code)
+CLAUDE_OPTIMIZE_INITIAL_PRD.md
+CLAUDE_OPTIMIZE_V2_PLAN.md
+migratingi_into_SQLite.md
+
+# IDE / OS
+.vscode/
+.cursor/
+.DS_Store
