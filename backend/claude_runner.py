@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 import re
 from collections.abc import Callable
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from models import Finding, ProjectSummary
@@ -18,15 +20,27 @@ MODEL_NAME = get_env("CLAUDE_OPTIMIZE_MODEL", default="opus")
 SKIP_PERMISSIONS = get_bool_env("CLAUDE_OPTIMIZE_SKIP_PERMISSIONS", default=False)
 
 
+_FILE_TOOLS = {"Edit", "Write", "NotebookEdit"}
+
+
 async def run_apply(
     prompt: str,
     project_path: str,
     on_output: Callable[[str], None] | None = None,
+    on_tool_use: Callable[[str, str], None] | None = None,
 ) -> str:
-    """Run Claude Code to apply changes to a project, streaming stdout line-by-line."""
+    """Run Claude Code to apply changes to a project, streaming structured events.
+
+    *on_output* is called with each line of text output from Claude.
+    *on_tool_use* is called with (tool_name, file_path) when a file-editing
+    tool is invoked, allowing callers to track per-file progress.
+    """
     command = [
         "claude",
         "--print",
+        "--verbose",
+        "--output-format",
+        "stream-json",
         "--model",
         MODEL_NAME,
         "--max-turns",
@@ -45,14 +59,61 @@ async def run_apply(
     )
 
     output_lines: list[str] = []
+    result_text: str = ""
 
     async def _stream_stdout():
+        nonlocal result_text
         assert proc.stdout is not None
         async for raw_line in proc.stdout:
             line = raw_line.decode().rstrip("\n")
-            output_lines.append(line)
-            if on_output:
-                on_output(line)
+            if not line:
+                continue
+            try:
+                event = json.loads(line)
+            except json.JSONDecodeError:
+                # Non-JSON output — treat as plain text
+                output_lines.append(line)
+                if on_output:
+                    on_output(line)
+                continue
+
+            event_type = event.get("type")
+
+            if event_type == "assistant":
+                # Extract text content and tool_use blocks
+                msg = event.get("message", {})
+                for block in msg.get("content", []):
+                    if block.get("type") == "text":
+                        text = block.get("text", "")
+                        for text_line in text.splitlines():
+                            output_lines.append(text_line)
+                            if on_output:
+                                on_output(text_line)
+                    elif block.get("type") == "tool_use":
+                        tool_name = block.get("name", "")
+                        tool_input = block.get("input", {})
+                        file_path = tool_input.get("file_path", "")
+                        # Forward file-editing tool use for finding progress tracking
+                        if tool_name in _FILE_TOOLS and file_path and on_tool_use:
+                            on_tool_use(tool_name, file_path)
+                        # Show tool activity as output so the user sees progress
+                        if on_output:
+                            if file_path:
+                                on_output(f"Using {tool_name} on {file_path}...")
+                            elif tool_name in ("Bash", "Glob", "Grep", "Read"):
+                                # Show non-file tools too for visibility
+                                cmd = tool_input.get("command", "")
+                                pattern = tool_input.get("pattern", "")
+                                detail = cmd[:80] if cmd else pattern[:80] if pattern else ""
+                                if detail:
+                                    on_output(f"Running {tool_name}: {detail}")
+                                else:
+                                    on_output(f"Running {tool_name}...")
+
+            elif event_type == "result":
+                result_text = event.get("result", "")
+                if event.get("is_error") or event.get("subtype") == "error_max_turns":
+                    logger.warning("Apply stream result: subtype=%s", event.get("subtype"))
 
     stderr_lines: list[bytes] = []
 
@@ -84,7 +145,7 @@ async def run_apply(
             err = "Unknown error (check server logs for full output)"
         raise RuntimeError(f"Claude Code exited with code {proc.returncode}: {err}")
 
-    return "\n".join(output_lines)
+    return result_text or "\n".join(output_lines)
 
 
 _NO_CLAUDE_PATTERNS = [
@@ -111,17 +172,36 @@ def _detect_no_claude_usage(text: str) -> str | None:
     return None
 
 
-async def run_analyzer(prompt: str, project_path: str) -> tuple[list[Finding], str | None]:
+@dataclass
+class AnalyzerResult:
+    """Rich result from running an analyzer, including metadata for persistence."""
+    findings: list[Finding] = field(default_factory=list)
+    note: str | None = None
+    prompt_hash: str | None = None
+    model_name: str | None = None
+    raw_output: str | None = None
+
+
+async def run_analyzer(prompt: str, project_path: str) -> AnalyzerResult:
     """Run a Claude Code headless session and parse structured findings.
 
-    Returns (findings, note) where note is a string tag when the analyzer
-    detected something noteworthy (e.g. "no_claude_usage"), or None.
+    Returns an AnalyzerResult with findings, optional note, and metadata
+    for persistence (prompt hash, model name, raw output).
     """
     result_text = await _run_claude_prompt(prompt, project_path)
     findings = _parse_findings(result_text)
     note = _detect_no_claude_usage(result_text) if not findings else None
     logger.info("Parsed %d findings from analyzer response (%d chars), note=%s", len(findings), len(result_text), note)
-    return findings, note
+
+    prompt_hash = hashlib.sha256(prompt.encode()).hexdigest()
+
+    return AnalyzerResult(
+        findings=findings,
+        note=note,
+        prompt_hash=prompt_hash,
+        model_name=MODEL_NAME,
+        raw_output=result_text,
+    )
 
 
 async def run_project_summary(prompt: str, project_path: str) -> ProjectSummary:
@@ -224,6 +304,17 @@ def _normalize_finding(raw: dict) -> dict:
         if isinstance(block, dict) and "language" not in block:
             block["language"] = _detect_language(raw.get("location"))
 
+    # Fix misplaced content: if suggested_fix.code_snippet is empty but
+    # description contains what looks like file content (YAML frontmatter,
+    # markdown headers, code), swap them so the apply step gets usable content.
+    sf = raw.get("suggested_fix")
+    if isinstance(sf, dict):
+        snippet = (sf.get("code_snippet") or "").strip()
+        desc = (sf.get("description") or "").strip()
+        if not snippet and desc and _looks_like_code_content(desc):
+            sf["code_snippet"] = desc
+            sf["description"] = "Apply suggested changes"
+
     loc = raw.get("location")
     if isinstance(loc, dict):
         loc["lines"] = loc.get("lines") or ""
@@ -234,6 +325,23 @@ def _normalize_finding(raw: dict) -> dict:
         rec.setdefault("docs_url", "")
 
     return raw
+
+
+def _looks_like_code_content(text: str) -> bool:
+    """Heuristic: does this text look like code/file content rather than prose?"""
+    # YAML frontmatter (SKILL.md, config files)
+    if text.startswith("---"):
+        return True
+    # Markdown headers or code fences
+    if text.startswith("#") or text.startswith("```"):
+        return True
+    # Contains multiple newlines and indentation (structured content)
+    lines = text.split("\n")
+    if len(lines) >= 5:
+        indented = sum(1 for l in lines if l.startswith("  ") or l.startswith("\t"))
+        if indented >= len(lines) * 0.3:
+            return True
+    return False
 
 
 def _detect_language(location: dict | None) -> str:

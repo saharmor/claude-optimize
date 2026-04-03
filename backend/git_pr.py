@@ -36,6 +36,77 @@ async def _run_git(
     return stdout.decode().strip() if stdout else ""
 
 
+async def _run_git_ok(
+    args: list[str],
+    cwd: str,
+    timeout: int = _CMD_TIMEOUT,
+) -> tuple[bool, str, str]:
+    """Run a git command and return (success, stdout, stderr) without raising."""
+    proc = await asyncio.create_subprocess_exec(
+        *args,
+        cwd=cwd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    try:
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+    except asyncio.TimeoutError:
+        proc.kill()
+        await proc.wait()
+        return False, "", "Command timed out"
+
+    out = stdout.decode().strip() if stdout else ""
+    err = stderr.decode().strip() if stderr else ""
+    return proc.returncode == 0, out, err
+
+
+async def _ensure_push_remote(
+    project_path: str,
+    branch_name: str,
+    on_output: Callable[[str], None] | None = None,
+) -> tuple[str, str | None]:
+    """Determine which remote to push to, forking if necessary.
+
+    Returns (remote_name, gh_pr_head_flag_value).
+    - For repos the user owns/has write access: ("origin", None)
+    - For forked repos: ("fork", "<user>:<branch>")
+    """
+    def _log(msg: str) -> None:
+        if on_output:
+            on_output(msg)
+
+    # Try a dry-run push to origin to check permissions
+    ok, _, err = await _run_git_ok(
+        ["git", "push", "--dry-run", "origin", branch_name],
+        cwd=project_path,
+        timeout=_PUSH_TIMEOUT,
+    )
+    if ok:
+        return "origin", None
+
+    # Permission denied — need to fork
+    if "403" in err or "permission" in err.lower() or "denied" in err.lower():
+        _log("No push access to origin. Forking repository...")
+
+        # gh repo fork --remote adds a "fork" remote pointing to user's fork
+        await _run_git(
+            ["gh", "repo", "fork", "--remote", "--remote-name", "fork"],
+            cwd=project_path,
+            timeout=_PUSH_TIMEOUT,
+        )
+
+        # Get the authenticated user's GitHub username for --head flag
+        gh_user = await _run_git(
+            ["gh", "api", "user", "--jq", ".login"],
+            cwd=project_path,
+        )
+
+        return "fork", f"{gh_user}:{branch_name}"
+
+    # Some other push error — raise it
+    raise RuntimeError(f"Push failed: {err}")
+
+
 async def snapshot_changed_files(project_path: str) -> set[str]:
     """Return the set of files currently modified/untracked in the working tree.
 
@@ -101,23 +172,33 @@ async def retry_pull_request(
     except RuntimeError:
         raise RuntimeError(f"Branch {branch_name} not found locally. Cannot retry.")
 
+    # Determine push remote (fork if no write access to origin)
+    remote, head_flag = await _ensure_push_remote(
+        project_path, branch_name, on_output=on_output,
+    )
+
     # Push to remote
-    _log("Pushing to remote...")
+    _log(f"Pushing to {remote}...")
     await _run_git(
-        ["git", "push", "-u", "origin", branch_name],
+        ["git", "push", "-u", remote, branch_name],
         cwd=project_path,
         timeout=_PUSH_TIMEOUT,
     )
 
     # Create PR via GitHub CLI
     _log("Creating pull request...")
+    pr_cmd = [
+        "gh", "pr", "create",
+        "--title", pr_title,
+        "--body", pr_body,
+    ]
+    if head_flag:
+        pr_cmd += ["--head", head_flag]
+    else:
+        pr_cmd += ["--head", branch_name]
+
     pr_url = await _run_git(
-        [
-            "gh", "pr", "create",
-            "--title", pr_title,
-            "--body", pr_body,
-            "--head", branch_name,
-        ],
+        pr_cmd,
         cwd=project_path,
         timeout=_PUSH_TIMEOUT,
     )
@@ -187,23 +268,33 @@ async def create_pull_request(
             ["git", "commit", "-m", pr_title], cwd=project_path
         )
 
-        # 6. Push to remote
-        _log("Pushing to remote...")
+        # 6. Determine push remote (fork if no write access to origin)
+        remote, head_flag = await _ensure_push_remote(
+            project_path, branch_name, on_output=on_output,
+        )
+
+        # 7. Push to remote
+        _log(f"Pushing to {remote}...")
         await _run_git(
-            ["git", "push", "-u", "origin", branch_name],
+            ["git", "push", "-u", remote, branch_name],
             cwd=project_path,
             timeout=_PUSH_TIMEOUT,
         )
 
-        # 7. Create PR via GitHub CLI
+        # 8. Create PR via GitHub CLI
         _log("Creating pull request...")
+        pr_cmd = [
+            "gh", "pr", "create",
+            "--title", pr_title,
+            "--body", pr_body,
+        ]
+        if head_flag:
+            pr_cmd += ["--head", head_flag]
+        else:
+            pr_cmd += ["--head", branch_name]
+
         pr_url = await _run_git(
-            [
-                "gh", "pr", "create",
-                "--title", pr_title,
-                "--body", pr_body,
-                "--head", branch_name,
-            ],
+            pr_cmd,
             cwd=project_path,
             timeout=_PUSH_TIMEOUT,
         )
